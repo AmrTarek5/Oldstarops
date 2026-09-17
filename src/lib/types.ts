@@ -56,7 +56,6 @@ export interface DeliveryRow {
   status: DeliveryStatus;
   cod_amount: number;
   bosta_fee: number;
-  shipping_charged_to_customer: number;
   delivered_at: string | null;
   raw: Record<string, unknown>;
   created_at: string;
@@ -127,4 +126,5 @@ export interface SyncStateRow {
   key: string;
   cursor: string | null;
   last_synced_at: string | null;
+  meta: Record<string, unknown>;
 }

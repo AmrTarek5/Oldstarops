@@ -88,11 +88,14 @@ export async function fetchOrdersPage(params: {
 }) {
   const search = new URLSearchParams();
   search.set("limit", String(params.limit ?? 100));
-  search.set("status", "any");
+
+  // Shopify's cursor-based pagination (page_info) rejects requests that
+  // include any other filter param alongside it - only limit is allowed.
   if (params.pageInfo) {
     search.set("page_info", params.pageInfo);
-  } else if (params.updatedAtMin) {
-    search.set("updated_at_min", params.updatedAtMin);
+  } else {
+    search.set("status", "any");
+    if (params.updatedAtMin) search.set("updated_at_min", params.updatedAtMin);
   }
 
   const res = await shopifyFetch(`/orders.json?${search.toString()}`);
@@ -124,38 +127,93 @@ export function isCodOrder(order: ShopifyOrder) {
   );
 }
 
-export interface ShopifyVariant {
-  id: number;
-  product_id: number;
+async function shopifyGraphQL<T>(query: string, variables: Record<string, unknown>) {
+  const res = await shopifyFetch(`/graphql.json`, {
+    method: "POST",
+    body: JSON.stringify({ query, variables }),
+  });
+  const json = (await res.json()) as { data: T; errors?: unknown };
+  if (json.errors) throw new Error(`Shopify GraphQL error: ${JSON.stringify(json.errors)}`);
+  return json.data;
+}
+
+/** Numeric id from a Shopify GID, e.g. "gid://shopify/ProductVariant/123" -> "123" */
+export function idFromGid(gid: string) {
+  return gid.split("/").pop() ?? gid;
+}
+
+export interface ShopifyVariantNode {
+  id: string; // GID
   sku: string | null;
   barcode: string | null;
   title: string;
   price: string;
-  inventory_item_id: number;
-  inventory_quantity: number;
+  inventoryQuantity: number | null;
+  inventoryItem: { unitCost: { amount: string } | null };
+  product: { id: string; title: string };
 }
 
-export async function fetchProductsPage(params: { pageInfo?: string; limit?: number }) {
-  const search = new URLSearchParams();
-  search.set("limit", String(params.limit ?? 100));
-  if (params.pageInfo) search.set("page_info", params.pageInfo);
+const VARIANTS_QUERY = `
+  query getVariants($cursor: String) {
+    productVariants(first: 100, after: $cursor) {
+      edges {
+        cursor
+        node {
+          id
+          sku
+          barcode
+          title
+          price
+          inventoryQuantity
+          inventoryItem { unitCost { amount } }
+          product { id title }
+        }
+      }
+      pageInfo { hasNextPage }
+    }
+  }
+`;
 
-  const res = await shopifyFetch(`/products.json?${search.toString()}`);
-  const data = (await res.json()) as {
-    products: Array<{
-      id: number;
-      title: string;
-      variants: ShopifyVariant[];
-    }>;
+/** Pulls product variants (with cost via inventoryItem.unitCost) via the GraphQL Admin API. */
+export async function fetchVariantsPage(cursor?: string) {
+  const data = await shopifyGraphQL<{
+    productVariants: {
+      edges: Array<{ cursor: string; node: ShopifyVariantNode }>;
+      pageInfo: { hasNextPage: boolean };
+    };
+  }>(VARIANTS_QUERY, { cursor: cursor ?? null });
+
+  const edges = data.productVariants.edges;
+  return {
+    variants: edges.map((e) => e.node),
+    nextCursor: data.productVariants.pageInfo.hasNextPage
+      ? edges[edges.length - 1]?.cursor ?? null
+      : null,
   };
-  const nextPageInfo = parseNextPageInfo(res.headers.get("link"));
-  return { products: data.products, nextPageInfo };
 }
+
+const SET_BARCODE_MUTATION = `
+  mutation setBarcode($input: ProductVariantInput!) {
+    productVariantUpdate(input: $input) {
+      productVariant { id barcode }
+      userErrors { field message }
+    }
+  }
+`;
 
 /** Sets a barcode on a variant. Only called for variants that don't already have one. */
-export async function setVariantBarcode(variantId: number, barcode: string) {
-  await shopifyFetch(`/variants/${variantId}.json`, {
-    method: "PUT",
-    body: JSON.stringify({ variant: { id: variantId, barcode } }),
-  });
+export async function setVariantBarcode(variantGid: string, barcode: string) {
+  const data = await shopifyGraphQL<{
+    productVariantUpdate: {
+      productVariant: { id: string; barcode: string } | null;
+      userErrors: Array<{ field: string; message: string }>;
+    };
+  }>(SET_BARCODE_MUTATION, { input: { id: variantGid, barcode } });
+
+  if (data.productVariantUpdate.userErrors.length > 0) {
+    throw new Error(
+      `Shopify barcode update failed: ${JSON.stringify(data.productVariantUpdate.userErrors)}`
+    );
+  }
+  return data.productVariantUpdate.productVariant;
 }

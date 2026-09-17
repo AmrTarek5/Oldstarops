@@ -40,11 +40,13 @@ Vercel — everything on free tiers.
 ## Deploying
 
 - Push to Vercel, set the same env vars in the Vercel project settings.
-- `vercel.json` defines the cron schedules for the Shopify/Bosta sync jobs —
-  Vercel's free (Hobby) tier allows cron jobs that run at most once a day
-  per job as of recent limits; check your plan's current cron allowance and
-  adjust the schedule (or move sync to Railway) if it's tighter than what's
-  configured here.
+- `vercel.json` defines hourly sync schedules. **Vercel's free Hobby tier
+  currently limits cron jobs to once per day** — hourly schedules require a
+  Pro plan. On Hobby, either change the schedules to `"0 4 * * *"` (once
+  daily) or trigger the sync routes yourself (e.g. a free external cron
+  pinger like cron-job.org hitting the route URL with the `CRON_SECRET`
+  bearer token) at whatever cadence you need. Check Vercel's current cron
+  limits before deploying, since these change over time.
 - The cron routes check a `CRON_SECRET` bearer token (set by Vercel
   automatically for its own cron invocations, or manually if triggering
   another way) — never leave them open.

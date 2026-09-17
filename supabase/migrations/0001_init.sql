@@ -45,7 +45,6 @@ create table if not exists deliveries (
     check (status in ('new', 'with_bosta', 'out_for_delivery', 'heading_back', 'delivered', 'failed')),
   cod_amount numeric(12, 2) not null default 0,
   bosta_fee numeric(12, 2) not null default 0,
-  shipping_charged_to_customer numeric(12, 2) not null default 0,
   delivered_at timestamptz,
   raw jsonb not null default '{}',
   created_at timestamptz not null default now(),
@@ -151,7 +150,8 @@ create table if not exists vip_customers (
 create table if not exists sync_state (
   key text primary key,
   cursor text,
-  last_synced_at timestamptz
+  last_synced_at timestamptz,
+  meta jsonb not null default '{}'
 );
 
 -- =========================================================================
