@@ -6,9 +6,63 @@ function baseUrl() {
   return `https://${domain}/admin/api/${API_VERSION}`;
 }
 
-function headers() {
-  const token = process.env.SHOPIFY_ADMIN_API_ACCESS_TOKEN;
-  if (!token) throw new Error("Missing SHOPIFY_ADMIN_API_ACCESS_TOKEN env var");
+/**
+ * Since Jan 1, 2026, Shopify custom apps built in the Dev Dashboard no
+ * longer expose a static Admin API access token. Instead the app requests
+ * a short-lived token itself via the client credentials grant (this only
+ * works because the app and the store are in the same Shopify
+ * organization - see https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant).
+ * Tokens last ~24h; cached in memory and refreshed a bit early. The cache
+ * only helps within a warm serverless instance - each cold start requests
+ * a fresh token - but that's fine at this volume.
+ */
+let cachedToken: { token: string; expiresAt: number } | null = null;
+let tokenRequest: Promise<string> | null = null;
+
+async function getAccessToken(): Promise<string> {
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
+    return cachedToken.token;
+  }
+  if (tokenRequest) return tokenRequest;
+
+  tokenRequest = (async () => {
+    const clientId = process.env.SHOPIFY_CLIENT_ID;
+    const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+    const domain = process.env.SHOPIFY_STORE_DOMAIN;
+    if (!clientId || !clientSecret || !domain) {
+      throw new Error(
+        "Missing SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET / SHOPIFY_STORE_DOMAIN env vars"
+      );
+    }
+
+    const res = await fetch(`https://${domain}/admin/oauth/access_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Failed to get Shopify access token (${res.status}): ${body}`);
+    }
+    const data = (await res.json()) as { access_token: string; expires_in: number };
+    cachedToken = { token: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 };
+    return data.access_token;
+  })();
+
+  try {
+    return await tokenRequest;
+  } finally {
+    tokenRequest = null;
+  }
+}
+
+async function headers() {
+  const token = await getAccessToken();
   return {
     "X-Shopify-Access-Token": token,
     "Content-Type": "application/json",
@@ -28,7 +82,7 @@ export class ShopifyApiError extends Error {
 async function shopifyFetch(path: string, init?: RequestInit) {
   const res = await fetch(`${baseUrl()}${path}`, {
     ...init,
-    headers: { ...headers(), ...(init?.headers || {}) },
+    headers: { ...(await headers()), ...(init?.headers || {}) },
     cache: "no-store",
   });
   if (!res.ok) {

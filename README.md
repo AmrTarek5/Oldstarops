@@ -20,9 +20,17 @@ Vercel — everything on free tiers.
 1. **Supabase**: create a free project, then run the SQL in
    `supabase/migrations/0001_init.sql` in the SQL editor. Copy the project URL,
    anon key, and service role key.
-2. **Shopify**: in the OldStar store admin, go to Settings → Apps → Develop
-   apps, create a custom app with Admin API access (read/write orders,
-   products, inventory), install it, and copy the Admin API access token.
+2. **Shopify**: since Jan 1, 2026 new custom apps are built in Shopify's Dev
+   Dashboard, not the classic Settings → Apps → Develop apps screen. From
+   the store admin: Settings → Apps and sales channels → Develop apps →
+   "Build apps in Dev Dashboard". Create an app there, add scopes
+   `read_orders`, `read_products`, `write_products`, `read_inventory`,
+   install it on the OldStar store (must be in the same org as the app),
+   then copy the **Client ID** and **Client secret** from the app's Settings
+   tab. These apps no longer expose a static Admin API access token — the
+   app requests one itself via the OAuth client credentials grant, which
+   only works because the app and store share an org. See
+   `src/lib/shopify.ts` for the token-fetching logic.
 3. **Bosta**: get an API key from the Bosta merchant dashboard.
    ⚠️ The Bosta client (`src/lib/bosta.ts`) was written without access to
    Bosta's live API docs (no network access in the build sandbox) — the
