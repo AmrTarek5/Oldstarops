@@ -56,10 +56,16 @@ async function bostaFetch(path: string, init?: RequestInit) {
   return res;
 }
 
-/** Simple connectivity check used by the setup/test screen. VERIFY path. */
+/**
+ * Simple connectivity check used by the setup/test screen. Reuses the same
+ * deliveries-list endpoint the real sync job calls (rather than a separate
+ * guessed "/business" endpoint) so the test actually validates the path
+ * that matters. If this still 404s with a correct API key, VERIFY the
+ * `/deliveries` path itself against your Bosta API reference.
+ */
 export async function testBostaConnection() {
-  const res = await bostaFetch("/business"); // VERIFY: business/profile endpoint
-  return res.json();
+  const result = await fetchDeliveriesPage({ limit: 1 });
+  return { ok: true, sampleCount: result.deliveries.length };
 }
 
 // VERIFY: Bosta's actual state names/codes for delivery status. This map
