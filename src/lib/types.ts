@@ -57,6 +57,8 @@ export interface DeliveryRow {
   cod_amount: number;
   bosta_fee: number;
   delivered_at: string | null;
+  resolution: "restocked" | "cleared" | null;
+  resolved_at: string | null;
   raw: Record<string, unknown>;
   created_at: string;
   updated_at: string;

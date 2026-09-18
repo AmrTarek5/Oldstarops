@@ -46,6 +46,8 @@ create table if not exists deliveries (
   cod_amount numeric(12, 2) not null default 0,
   bosta_fee numeric(12, 2) not null default 0,
   delivered_at timestamptz,
+  resolution text check (resolution in ('restocked', 'cleared')),
+  resolved_at timestamptz,
   raw jsonb not null default '{}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

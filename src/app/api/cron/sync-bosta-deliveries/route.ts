@@ -27,7 +27,7 @@ async function resolveOrderId(
   return byNumber.data?.id ?? null;
 }
 
-function mapDelivery(d: BostaDelivery, orderId: string | null): DeliveryRow {
+function mapDelivery(d: BostaDelivery, orderId: string | null): Omit<DeliveryRow, "resolution" | "resolved_at"> {
   return {
     id: d._id,
     order_id: orderId,
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       pagesFetched += 1;
 
       if (result.deliveries.length > 0) {
-        const rows: DeliveryRow[] = [];
+        const rows: Omit<DeliveryRow, "resolution" | "resolved_at">[] = [];
         for (const d of result.deliveries) {
           const orderId = await resolveOrderId(db, d.orderReference);
           rows.push(mapDelivery(d, orderId));

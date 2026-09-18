@@ -99,13 +99,18 @@ export async function getWhales() {
     vipSpendRes = res;
   }
 
-  const merged = new Map<string, { email: string; name: string | null; spend: number; orders: number }>();
+  const vipEmailSet = new Set(vipEmails);
+  const merged = new Map<
+    string,
+    { email: string; name: string | null; spend: number; orders: number; isVip: boolean }
+  >();
   for (const row of topSpendRes.data ?? []) {
     merged.set(row.customer_email, {
       email: row.customer_email,
       name: row.customer_name,
       spend: Number(row.total_spent),
       orders: row.order_count,
+      isVip: vipEmailSet.has(row.customer_email),
     });
   }
   for (const row of vipSpendRes.data ?? []) {
@@ -114,6 +119,7 @@ export async function getWhales() {
       name: row.customer_name,
       spend: Number(row.total_spent),
       orders: row.order_count,
+      isVip: true,
     });
   }
   // VIP-flagged customers with no order history yet still count as whales (revenue 0).
@@ -124,6 +130,7 @@ export async function getWhales() {
         name: vip.customer_name,
         spend: 0,
         orders: 0,
+        isVip: true,
       });
     }
   }
@@ -136,14 +143,16 @@ export async function getWhales() {
 
 export async function getBulkOrders(days = 30) {
   const db = supabaseAdmin();
-  const { data, error, count } = await db
+  let query = db
     .from("orders")
     .select("id, order_number, customer_name, item_count, total, shopify_created_at", {
       count: "exact",
     })
     .gte("item_count", BULK_ORDER_MIN_ITEMS)
-    .gte("shopify_created_at", daysAgoIso(days))
     .order("shopify_created_at", { ascending: false });
+  if (days > 0) query = query.gte("shopify_created_at", daysAgoIso(days));
+
+  const { data, error, count } = await query;
   if (error) throw error;
 
   const totalValue = (data ?? []).reduce((sum, o) => sum + Number(o.total), 0);

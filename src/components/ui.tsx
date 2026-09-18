@@ -94,6 +94,18 @@ export function EmptyState({ message }: { message: string }) {
   );
 }
 
+export function ExportLink({ type, days, label = "Export CSV" }: { type: string; days?: number; label?: string }) {
+  const href = `/api/export/${type}${days ? `?days=${days}` : ""}`;
+  return (
+    <a
+      href={href}
+      className="inline-flex items-center rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+    >
+      {label}
+    </a>
+  );
+}
+
 export function Table({
   columns,
   children,
