@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { toCsv, csvResponse } from "@/lib/csv";
 import { getBulkOrders, getWhales } from "@/lib/metrics";
-import { getFailedDeliveries, getInTransitStock } from "@/lib/ops";
+import { getFailedDeliveries, getInTransitStock, getShippingReconciliation } from "@/lib/ops";
 
 function daysAgoIso(days: number) {
   const d = new Date();
@@ -77,6 +77,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               cod_amount: r.codAmount,
               stock_value_at_cost: r.stockValueAtCost,
               stock_value_at_retail: r.stockValueAtRetail,
+            }))
+          )
+        );
+      }
+
+      case "shipping-reconciliation": {
+        const { rows } = await getShippingReconciliation(days || 0);
+        return csvResponse(
+          "shipping-reconciliation.csv",
+          toCsv(
+            rows.map((r) => ({
+              tracking_number: r.trackingNumber,
+              order_number: r.orderNumber,
+              delivered_at: r.deliveredAt,
+              shipping_charged: r.shippingCharged,
+              bosta_fee: r.bostaFee,
+              net: r.net,
             }))
           )
         );

@@ -106,6 +106,97 @@ export async function clearFailedDelivery(deliveryId: string) {
     .eq("id", deliveryId);
 }
 
+export interface MissingBarcodeRow {
+  variantId: string;
+  sku: string | null;
+  productTitle: string;
+  variantTitle: string | null;
+  stockQty: number;
+}
+
+export async function getVariantsMissingBarcodes() {
+  const db = supabaseAdmin();
+  const { data, error } = await db
+    .from("inventory_snapshot")
+    .select("variant_id, sku, product_title, variant_title, stock_qty")
+    .or("barcode.is.null,barcode.eq.")
+    .order("product_title", { ascending: true });
+  if (error) throw error;
+
+  return (data ?? []).map((r) => ({
+    variantId: r.variant_id,
+    sku: r.sku,
+    productTitle: r.product_title,
+    variantTitle: r.variant_title,
+    stockQty: r.stock_qty,
+  })) satisfies MissingBarcodeRow[];
+}
+
+export interface ShippingReconciliationRow {
+  deliveryId: string;
+  trackingNumber: string;
+  orderNumber: string | null;
+  deliveredAt: string | null;
+  shippingCharged: number;
+  bostaFee: number;
+  net: number;
+}
+
+export async function getShippingReconciliation(days = 30) {
+  const db = supabaseAdmin();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  let query = db
+    .from("deliveries")
+    .select("id, tracking_number, order_id, bosta_fee, delivered_at")
+    .eq("status", "delivered")
+    .order("delivered_at", { ascending: false });
+  if (days > 0) query = query.gte("delivered_at", since.toISOString());
+
+  const { data: deliveries, error } = await query;
+  if (error) throw error;
+
+  const orderIds = [...new Set((deliveries ?? []).map((d) => d.order_id).filter(Boolean))] as string[];
+  const shippingByOrder = new Map<string, { order_number: string; shipping_charged: number }>();
+  if (orderIds.length > 0) {
+    const { data: orders, error: ordersError } = await db
+      .from("orders")
+      .select("id, order_number, shipping_charged")
+      .in("id", orderIds);
+    if (ordersError) throw ordersError;
+    for (const o of orders ?? []) {
+      shippingByOrder.set(o.id, { order_number: o.order_number, shipping_charged: Number(o.shipping_charged) });
+    }
+  }
+
+  const rows: ShippingReconciliationRow[] = (deliveries ?? []).map((d) => {
+    const order = d.order_id ? shippingByOrder.get(d.order_id) : undefined;
+    const shippingCharged = order?.shipping_charged ?? 0;
+    const bostaFee = Number(d.bosta_fee) || 0;
+    return {
+      deliveryId: d.id,
+      trackingNumber: d.tracking_number,
+      orderNumber: order?.order_number ?? null,
+      deliveredAt: d.delivered_at,
+      shippingCharged,
+      bostaFee,
+      net: shippingCharged - bostaFee,
+    };
+  });
+
+  const totals = rows.reduce(
+    (acc, r) => ({
+      shippingCharged: acc.shippingCharged + r.shippingCharged,
+      bostaFee: acc.bostaFee + r.bostaFee,
+      net: acc.net + r.net,
+    }),
+    { shippingCharged: 0, bostaFee: 0, net: 0 }
+  );
+
+  return { rows, totals };
+}
+
 const IN_TRANSIT_STATUSES = ["with_bosta", "out_for_delivery", "heading_back"] as const;
 
 export interface InTransitRow {
