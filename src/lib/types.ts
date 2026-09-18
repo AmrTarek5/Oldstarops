@@ -76,6 +76,7 @@ export interface ReturnRequestRow {
   photo_urls: string[];
   ai_review: Record<string, unknown> | null;
   bosta_pickup_id: string | null;
+  pickup_fee: number | null;
   refund_amount: number | null;
   revenue_recovered: number | null;
   created_at: string;

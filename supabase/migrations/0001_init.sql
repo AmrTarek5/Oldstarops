@@ -72,6 +72,7 @@ create table if not exists return_requests (
   photo_urls text[] not null default '{}',
   ai_review jsonb,
   bosta_pickup_id text,
+  pickup_fee numeric(12, 2),
   refund_amount numeric(12, 2),
   revenue_recovered numeric(12, 2),
   created_at timestamptz not null default now(),
