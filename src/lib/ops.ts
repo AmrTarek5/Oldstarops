@@ -13,6 +13,17 @@ export interface FailedDeliveryRow {
   updatedAt: string;
 }
 
+export async function getFailedDeliveryCount() {
+  const db = supabaseAdmin();
+  const { count, error } = await db
+    .from("deliveries")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "failed")
+    .is("resolved_at", null);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 /** Failed deliveries that haven't been restocked or cleared yet. */
 export async function getFailedDeliveries() {
   const db = supabaseAdmin();
