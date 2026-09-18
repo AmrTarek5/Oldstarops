@@ -33,6 +33,9 @@ export interface OrderRow {
   customer_id: string | null;
   customer_name: string | null;
   customer_email: string | null;
+  customer_phone: string | null;
+  shipping_address: string | null;
+  shipping_city: string | null;
   items: OrderLineItem[];
   item_count: number;
   subtotal: number;

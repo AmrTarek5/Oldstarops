@@ -66,6 +66,13 @@ export interface ShopifyOrder {
     last_name: string | null;
     email: string | null;
   } | null;
+  phone: string | null;
+  shipping_address: {
+    address1: string | null;
+    address2: string | null;
+    city: string | null;
+    phone: string | null;
+  } | null;
   line_items: Array<{
     variant_id: number | null;
     sku: string | null;

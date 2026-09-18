@@ -32,6 +32,11 @@ function mapOrder(order: ShopifyOrder): OrderRow {
     customer_id: order.customer ? String(order.customer.id) : null,
     customer_name: customerName,
     customer_email: order.customer?.email ?? null,
+    customer_phone: order.shipping_address?.phone ?? order.phone ?? null,
+    shipping_address: order.shipping_address
+      ? [order.shipping_address.address1, order.shipping_address.address2].filter(Boolean).join(", ") || null
+      : null,
+    shipping_city: order.shipping_address?.city ?? null,
     items,
     item_count: items.reduce((sum, i) => sum + i.quantity, 0),
     subtotal: Number(order.subtotal_price) || 0,
