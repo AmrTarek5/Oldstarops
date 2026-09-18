@@ -1,19 +1,28 @@
 /**
  * Bosta API client.
  *
- * IMPORTANT: This sandbox has no outbound internet access, so the exact
- * endpoint paths, auth header format, and payload shapes below could NOT be
- * verified against Bosta's live API docs. They're written to match Bosta's
- * commonly-documented v2 REST shape, but before relying on this in
- * production:
- *   1. Log into the OldStar Bosta merchant dashboard and pull the API
- *      reference / Postman collection from Settings > API/Integrations.
- *   2. Confirm: base URL, auth header, the deliveries-list endpoint + its
- *      filters/pagination, the delivery state codes (STATE_CODES below),
- *      and the pickup-request payload shape.
- *   3. Update the few spots marked "VERIFY" — the rest of the app (sync job,
- *      status mapping, pickup automation) is written against this module's
- *      exported functions, so a wrong endpoint is a one-file fix.
+ * Confirmed against docs.bosta.co's live reference (Sept 2026):
+ *   - Base URL: https://app.bosta.co/api/v2 (the docs show http://, but the
+ *     server 308-redirects http -> https, so we call https directly)
+ *   - Auth: `Authorization: Bearer <api key>` (not the raw key)
+ *   - Listing/filtering deliveries: POST /deliveries/search (not a GET
+ *     /deliveries as originally guessed), body is a JSON filter object
+ *     (type, trackingNumbers, mobilePhones, businessReference, stateCodes)
+ *   - Delivery `state` is `{ code: number, value: string }`, e.g.
+ *     `{ code: 10, value: "Pickup requested" }` - only code 10 is confirmed
+ *     so far; the rest of STATE_MAP below is inferred and marked VERIFY.
+ *
+ * Still NOT confirmed (marked VERIFY below) since we haven't seen a real
+ * successful response yet:
+ *   - Whether /deliveries/search's response `data` is an array directly, an
+ *     object with a nested list field, or paginated - the docs example
+ *     showed a single object that looked like it was actually the "Create
+ *     delivery" endpoint's example, not this one's.
+ *   - Pagination params (query string vs body) for /deliveries/search.
+ *   - The full "Create delivery" payload shape used by createReturnPickup.
+ *   - The rest of the numeric state codes beyond 10.
+ * Re-run a search with a real, working API key once you have one and the
+ * response will answer all of these - update this file to match.
  */
 import type { DeliveryStatus } from "./types";
 
@@ -24,11 +33,8 @@ function baseUrl() {
 function headers() {
   const key = process.env.BOSTA_API_KEY;
   if (!key) throw new Error("Missing BOSTA_API_KEY env var");
-  // VERIFY: Bosta has historically accepted the raw API key in the
-  // Authorization header (no "Bearer " prefix). Confirm against your
-  // merchant docs and switch to `Bearer ${key}` if needed.
   return {
-    Authorization: key,
+    Authorization: `Bearer ${key}`,
     "Content-Type": "application/json",
   };
 }
@@ -57,71 +63,98 @@ async function bostaFetch(path: string, init?: RequestInit) {
 }
 
 /**
- * Simple connectivity check used by the setup/test screen. Reuses the same
- * deliveries-list endpoint the real sync job calls (rather than a separate
- * guessed "/business" endpoint) so the test actually validates the path
- * that matters. If this still 404s with a correct API key, VERIFY the
- * `/deliveries` path itself against your Bosta API reference.
+ * Simple connectivity check used by the setup/test screen. Calls the same
+ * /deliveries/search endpoint the real sync job uses, with an empty filter
+ * (all deliveries), one page.
  */
 export async function testBostaConnection() {
   const result = await fetchDeliveriesPage({ limit: 1 });
   return { ok: true, sampleCount: result.deliveries.length };
 }
 
-// VERIFY: Bosta's actual state names/codes for delivery status. This map
-// translates whatever string Bosta returns into our internal DeliveryStatus.
-// Edit the left-hand keys to match real values once confirmed.
-const STATE_MAP: Record<string, DeliveryStatus> = {
-  CREATED: "new",
-  PICKUP_REQUESTED: "new",
-  PICKED_UP: "with_bosta",
-  IN_TRANSIT: "with_bosta",
-  OUT_FOR_DELIVERY: "out_for_delivery",
-  HEADING_BACK: "heading_back",
-  RETURNED_TO_ORIGIN: "heading_back",
-  DELIVERED: "delivered",
-  FAILED: "failed",
-  CANCELED: "failed",
+// Only code 10 ("Pickup requested") is confirmed from docs.bosta.co. The
+// rest are inferred from typical last-mile courier flows - VERIFY each one
+// against a real response and correct the numbers/labels as needed. The
+// `mapBostaState` fallback below also matches on the human-readable `value`
+// text as a safety net for codes not yet listed here.
+const STATE_CODE_MAP: Record<number, DeliveryStatus> = {
+  10: "new", // "Pickup requested"
+  20: "with_bosta", // guessed: picked up
+  30: "with_bosta", // guessed: in transit
+  40: "out_for_delivery", // guessed
+  41: "delivered", // guessed
+  45: "heading_back", // guessed: returned to origin
+  46: "failed", // guessed: delivery failed / terminated
 };
 
-export function mapBostaState(state: string): DeliveryStatus {
-  return STATE_MAP[state.toUpperCase()] ?? "new";
+const VALUE_KEYWORD_MAP: Array<[RegExp, DeliveryStatus]> = [
+  [/deliver/i, "delivered"],
+  [/out for delivery/i, "out_for_delivery"],
+  [/head(ing)? back|return(ed)? to origin|rto/i, "heading_back"],
+  [/fail|terminat|cancel/i, "failed"],
+  [/pick(ed)?\s*up|transit|with courier/i, "with_bosta"],
+  [/pickup requested|created|new/i, "new"],
+];
+
+export function mapBostaState(state: { code: number; value: string }): DeliveryStatus {
+  if (state.code in STATE_CODE_MAP) return STATE_CODE_MAP[state.code];
+  const match = VALUE_KEYWORD_MAP.find(([pattern]) => pattern.test(state.value));
+  return match ? match[1] : "new";
 }
 
 export interface BostaDelivery {
   _id: string;
   trackingNumber: string;
-  state: string;
+  state: { code: number; value: string };
   cod: number;
   fees?: number;
-  orderReference?: string; // expected to hold the Shopify order id/name
+  businessReference?: string; // expected to hold the Shopify order id/name
   updatedAt: string;
   deliveredAt?: string | null;
 }
 
 /**
- * Pulls deliveries updated since a given date, paginated.
- * VERIFY: real query param names (page/limit/updatedAfter) and response envelope.
+ * Pulls deliveries matching an optional filter, paginated.
+ * VERIFY once a working API key is available:
+ *   - Whether `page`/`limit` belong in the query string (as written) or the
+ *     JSON body instead.
+ *   - The exact shape of the response's `data` (array vs `{ deliveries, total }`
+ *     vs something else) - `parseDeliveries` below tries a few common shapes.
  */
 export async function fetchDeliveriesPage(params: {
-  updatedAfter?: string;
+  stateCodes?: string[];
   page?: number;
   limit?: number;
 }) {
-  const search = new URLSearchParams();
-  search.set("limit", String(params.limit ?? 100));
-  search.set("page", String(params.page ?? 1));
-  if (params.updatedAfter) search.set("updatedAfter", params.updatedAfter);
+  const limit = params.limit ?? 100;
+  const page = params.page ?? 1;
 
-  const res = await bostaFetch(`/deliveries?${search.toString()}`);
-  const data = (await res.json()) as {
-    data: BostaDelivery[];
-    total?: number;
-  };
+  const res = await bostaFetch(`/deliveries/search?page=${page}&limit=${limit}`, {
+    method: "POST",
+    body: JSON.stringify({
+      ...(params.stateCodes ? { stateCodes: params.stateCodes } : {}),
+    }),
+  });
+  const json = (await res.json()) as { success: boolean; data: unknown };
+  const deliveries = parseDeliveries(json.data);
+
   return {
-    deliveries: data.data ?? [],
-    hasMore: data.data && data.data.length === (params.limit ?? 100),
+    deliveries,
+    hasMore: deliveries.length === limit,
   };
+}
+
+function parseDeliveries(data: unknown): BostaDelivery[] {
+  if (Array.isArray(data)) return data as BostaDelivery[];
+  if (data && typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    if (Array.isArray(obj.deliveries)) return obj.deliveries as BostaDelivery[];
+    if (Array.isArray(obj.data)) return obj.data as BostaDelivery[];
+    if (Array.isArray(obj.items)) return obj.items as BostaDelivery[];
+    // A single delivery object (not wrapped in a list) - treat as a 1-item page.
+    if ("_id" in obj && "trackingNumber" in obj) return [obj as unknown as BostaDelivery];
+  }
+  return [];
 }
 
 /**

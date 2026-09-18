@@ -11,10 +11,10 @@ const MAX_PAGES_PER_RUN = 5;
 
 async function resolveOrderId(
   db: ReturnType<typeof supabaseAdmin>,
-  orderReference: string | undefined
+  businessReference: string | undefined
 ) {
-  if (!orderReference) return null;
-  const cleaned = orderReference.replace(/^#/, "");
+  if (!businessReference) return null;
+  const cleaned = businessReference.replace(/^#/, "");
 
   const byId = await db.from("orders").select("id").eq("id", cleaned).maybeSingle();
   if (byId.data) return byId.data.id as string;
@@ -58,7 +58,6 @@ export async function GET(request: NextRequest) {
   const sweepStartedAt =
     (syncState?.meta?.sweep_started_at as string | undefined) || new Date().toISOString();
   let page = (syncState?.meta?.page as number | undefined) ?? 1;
-  const updatedAfter = syncState?.cursor ? undefined : syncState?.last_synced_at ?? undefined;
 
   let pagesFetched = 0;
   let deliveriesUpserted = 0;
@@ -66,13 +65,16 @@ export async function GET(request: NextRequest) {
 
   try {
     do {
-      const result = await fetchDeliveriesPage({ page, updatedAfter, limit: 100 });
+      // No confirmed date-range filter on Bosta's search endpoint, so each
+      // sweep re-pages through everything - upserts de-dupe by id, so this
+      // is just less efficient than a true incremental sync, not incorrect.
+      const result = await fetchDeliveriesPage({ page, limit: 100 });
       pagesFetched += 1;
 
       if (result.deliveries.length > 0) {
         const rows: Omit<DeliveryRow, "resolution" | "resolved_at">[] = [];
         for (const d of result.deliveries) {
-          const orderId = await resolveOrderId(db, d.orderReference);
+          const orderId = await resolveOrderId(db, d.businessReference);
           rows.push(mapDelivery(d, orderId));
         }
         const { error } = await db.from("deliveries").upsert(rows, { onConflict: "id" });
