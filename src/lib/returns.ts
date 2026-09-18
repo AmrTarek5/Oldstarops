@@ -165,6 +165,43 @@ export async function completeReturn(
   if (error) throw error;
 }
 
+export interface MostReturnedProduct {
+  variantId: string | null;
+  title: string;
+  returnCount: number;
+  unitsReturned: number;
+}
+
+export async function getMostReturnedProducts(days: number, limit = 10) {
+  const db = supabaseAdmin();
+  let query = db.from("v_return_line_items").select("variant_id, title, quantity, return_id, created_at");
+  if (days > 0) {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    query = query.gte("created_at", since.toISOString());
+  }
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const byVariant = new Map<string, MostReturnedProduct>();
+  for (const row of data ?? []) {
+    const key = row.variant_id ?? row.title;
+    const existing = byVariant.get(key) ?? {
+      variantId: row.variant_id,
+      title: row.title,
+      returnCount: 0,
+      unitsReturned: 0,
+    };
+    existing.returnCount += 1;
+    existing.unitsReturned += row.quantity;
+    byVariant.set(key, existing);
+  }
+
+  return Array.from(byVariant.values())
+    .sort((a, b) => b.unitsReturned - a.unitsReturned)
+    .slice(0, limit);
+}
+
 export async function getReturnRequests(statuses?: string[]) {
   const db = supabaseAdmin();
   let query = db.from("return_requests").select("*").order("created_at", { ascending: false });
