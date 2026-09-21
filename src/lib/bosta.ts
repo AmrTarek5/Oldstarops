@@ -189,29 +189,28 @@ const DELIVERY_TYPE_TO_ESTIMATE_TYPE: Record<number, EstimateDeliveryType> = {
 
 /**
  * Estimates what Bosta would charge for a delivery via their pricing
- * calculator (GET /pricing/shipment/calculator) - confirmed live, e.g. a
- * Cairo->Cairo SEND with cod=100 returned `shippingFee: 75`,
- * `priceAfterVat: 85.5` (14% VAT), plus two more per-delivery line items
- * both flagged active in OldStar's plan (`tier.configurations`):
- * `bostaMaterialFee.amount: 55` and `tier.openingPackageFee.amount: 7`
- * (opening-package fee applies since deliveries are created with
- * `allowToOpenPackage: true`, matching OldStar's real ones). The total
- * returned here is `priceAfterVat + bostaMaterialFee + openingPackageFee`.
+ * calculator (GET /pricing/shipment/calculator).
  *
- * Still an approximation, not a real invoice: it's unconfirmed whether VAT
- * applies to the material/opening-package add-ons too (the response
- * doesn't show a VAT-inclusive version of them, so they're added as flat
- * amounts), and `tier.pickupFee` (70 EGP, with a
- * `numberOfOrdersThreshold: 2`) looks like it's amortized across a whole
- * pickup batch rather than charged per delivery, so it's excluded here.
+ * Formula CONFIRMED against a real OldStar invoice (order #6111, tracking
+ * 4166131258: 80 EGP base + 7 EGP opening-package fee = 87, x 1.14 VAT =
+ * 99.18 EGP):
  *
- * This is an ESTIMATE based on OldStar's plan/tier and route, not the
- * actual billed amount - Bosta doesn't expose that per-delivery (the
- * `pricing` field has been empty on every real delivery seen so far, see
- * `extractBostaFee`). Used as a fallback for the Shipping Reconciliation
- * `bosta_fee` figure when no real pricing data is available. Best-effort:
- * returns null rather than throwing, so a pricing hiccup never blocks the
- * delivery sync itself.
+ *   total = (shippingFee + tier.openingPackageFee) * (1 + vat)
+ *
+ * i.e. VAT applies to the opening-package fee too, not just the base
+ * shipping line - this is why it's computed manually here rather than
+ * just returning the API's own `priceAfterVat`, which only VATs
+ * `shippingFee` alone. `tier.bostaMaterialFee` (55 EGP in the API
+ * response) is NOT part of the real invoice and must be excluded - it's
+ * presumably a separate, non-per-shipment charge. `tier.pickupFee` (70
+ * EGP, with a `numberOfOrdersThreshold: 2`) also looks batched across a
+ * pickup run rather than per delivery, so it's excluded too.
+ *
+ * Still an ESTIMATE for routes other than the one confirmed above - based
+ * on OldStar's plan/tier and route, not a real per-delivery invoice line
+ * (Bosta doesn't expose that; `pricing` has been empty on every real
+ * delivery seen so far, see `extractBostaFee`). Best-effort: returns null
+ * rather than throwing, so a pricing hiccup never blocks the delivery sync.
  */
 export async function estimateShippingFee(params: {
   pickupCity: string;
@@ -232,18 +231,16 @@ export async function estimateShippingFee(params: {
     const json = (await res.json()) as {
       success: boolean;
       data?: {
-        priceAfterVat?: number;
-        tier?: {
-          bostaMaterialFee?: { amount?: number };
-          openingPackageFee?: { amount?: number };
-        };
+        shippingFee?: number;
+        vat?: number;
+        tier?: { openingPackageFee?: { amount?: number } };
       };
     };
-    if (!json.success || typeof json.data?.priceAfterVat !== "number") return null;
+    const { shippingFee, vat, tier } = json.data ?? {};
+    if (!json.success || typeof shippingFee !== "number" || typeof vat !== "number") return null;
 
-    const materialFee = json.data.tier?.bostaMaterialFee?.amount ?? 0;
-    const openingFee = json.data.tier?.openingPackageFee?.amount ?? 0;
-    return json.data.priceAfterVat + materialFee + openingFee;
+    const openingFee = tier?.openingPackageFee?.amount ?? 0;
+    return (shippingFee + openingFee) * (1 + vat);
   } catch {
     return null;
   }
