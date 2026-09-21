@@ -64,8 +64,17 @@ export default function ReturnsInbox({ requests }: { requests: ReturnRequestRow[
           {r.notes && <p className="text-sm text-neutral-500 mb-2">&ldquo;{r.notes}&rdquo;</p>}
 
           <p className="text-xs text-neutral-500 mb-2">
+            <span className="font-medium text-neutral-600">Returning:</span>{" "}
             {r.items.map((i) => `${i.quantity}× ${i.title}`).join(", ")}
           </p>
+          {r.desired_items.length > 0 && (
+            <p className="text-xs text-neutral-500 mb-2">
+              <span className="font-medium text-neutral-600">Wants instead:</span>{" "}
+              {r.desired_items
+                .map((d) => `${d.quantity}× ${d.product_title}${d.options.length > 0 ? ` (${d.options.map((o) => o.value).join(" / ")})` : ""}`)
+                .join(", ")}
+            </p>
+          )}
 
           {r.ai_review && (
             <p className="text-xs text-neutral-500 mb-2 bg-neutral-50 rounded-lg p-2">

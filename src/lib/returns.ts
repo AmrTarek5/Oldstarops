@@ -2,7 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { createReturnPickup } from "@/lib/bosta";
 import { evaluateReturn, getReturnPolicy } from "@/lib/policy";
 import { reviewReturnPhotos } from "@/lib/ai-review";
-import type { OrderLineItem, OrderRow, ReturnRequestRow, ReturnType } from "@/lib/types";
+import type { DesiredItem, OrderLineItem, OrderRow, ReturnRequestRow } from "@/lib/types";
 
 export async function lookupOrderForPortal(orderNumber: string, email: string) {
   const db = supabaseAdmin();
@@ -20,10 +20,10 @@ export async function lookupOrderForPortal(orderNumber: string, email: string) {
 
 export interface SubmitReturnInput {
   order: OrderRow;
-  type: ReturnType;
   reason: string;
   notes?: string;
   items: OrderLineItem[];
+  desiredItems: DesiredItem[];
   photoUrls: string[];
 }
 
@@ -54,7 +54,7 @@ export async function submitReturnRequest(input: SubmitReturnInput) {
       order_number: input.order.order_number,
       customer_name: input.order.customer_name,
       customer_email: input.order.customer_email,
-      type: input.type,
+      type: "exchange",
       reason: input.reason,
       notes:
         decision.decision === "reject"
@@ -62,6 +62,7 @@ export async function submitReturnRequest(input: SubmitReturnInput) {
           : input.notes ?? null,
       status,
       items: input.items,
+      desired_items: input.desiredItems,
       photo_urls: input.photoUrls,
       ai_review: aiReview,
     })

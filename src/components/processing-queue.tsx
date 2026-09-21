@@ -42,9 +42,18 @@ function AcceptedCard({ r, onChange }: { r: ReturnRequestRow; onChange: () => vo
           {r.bosta_pickup_id ? `Pickup ${r.bosta_pickup_id}` : "Pickup not created"}
         </Badge>
       </div>
-      <p className="text-xs text-neutral-500 mb-3">
+      <p className="text-xs text-neutral-500 mb-1">
+        <span className="font-medium text-neutral-600">Returning:</span>{" "}
         {r.items.map((i) => `${i.quantity}× ${i.title}`).join(", ")}
       </p>
+      {r.desired_items.length > 0 && (
+        <p className="text-xs text-neutral-500 mb-3">
+          <span className="font-medium text-neutral-600">Send instead:</span>{" "}
+          {r.desired_items
+            .map((d) => `${d.quantity}× ${d.product_title}${d.options.length > 0 ? ` (${d.options.map((o) => o.value).join(" / ")})` : ""}`)
+            .join(", ")}
+        </p>
+      )}
       <div className="flex gap-2">
         {!r.bosta_pickup_id && (
           <button
@@ -100,9 +109,18 @@ function ProcessingCard({ r, onChange }: { r: ReturnRequestRow; onChange: () => 
         </div>
         <Badge tone="info">{r.type}</Badge>
       </div>
-      <p className="text-xs text-neutral-500 mb-3">
+      <p className="text-xs text-neutral-500 mb-1">
+        <span className="font-medium text-neutral-600">Returning:</span>{" "}
         {r.items.map((i) => `${i.quantity}× ${i.title}`).join(", ")}
       </p>
+      {r.desired_items.length > 0 && (
+        <p className="text-xs text-neutral-500 mb-3">
+          <span className="font-medium text-neutral-600">Send instead:</span>{" "}
+          {r.desired_items
+            .map((d) => `${d.quantity}× ${d.product_title}${d.options.length > 0 ? ` (${d.options.map((o) => o.value).join(" / ")})` : ""}`)
+            .join(", ")}
+        </p>
+      )}
       <div className="flex items-end gap-3">
         {r.type === "return" ? (
           <div>

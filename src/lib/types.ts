@@ -27,6 +27,15 @@ export interface OrderLineItem {
   price: number; // unit price charged
 }
 
+/** A variant a customer wants in exchange, picked from the live catalog. */
+export interface DesiredItem {
+  variant_id: string;
+  product_title: string;
+  options: Array<{ name: string; value: string }>;
+  sku: string | null;
+  quantity: number;
+}
+
 export interface OrderRow {
   id: string; // Shopify order id (as string, Shopify uses large ints/gid)
   order_number: string;
@@ -78,6 +87,7 @@ export interface ReturnRequestRow {
   notes: string | null;
   status: ReturnStatus;
   items: OrderLineItem[];
+  desired_items: DesiredItem[];
   photo_urls: string[];
   ai_review: Record<string, unknown> | null;
   bosta_pickup_id: string | null;
@@ -95,6 +105,8 @@ export interface InventorySnapshotRow {
   product_id: string | null;
   product_title: string;
   variant_title: string | null;
+  options: Array<{ name: string; value: string }>;
+  image_url: string | null;
   stock_qty: number;
   cost: number;
   retail_price: number;

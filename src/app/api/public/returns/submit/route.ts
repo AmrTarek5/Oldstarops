@@ -3,15 +3,16 @@ import { lookupOrderForPortal, submitReturnRequest } from "@/lib/returns";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { orderNumber, email, type, reason, notes, items, photoUrls } = body;
+  const { orderNumber, email, reason, notes, items, desiredItems, photoUrls } = body;
 
   if (
     typeof orderNumber !== "string" ||
     typeof email !== "string" ||
-    (type !== "return" && type !== "exchange") ||
     typeof reason !== "string" ||
     !Array.isArray(items) ||
-    items.length === 0
+    items.length === 0 ||
+    !Array.isArray(desiredItems) ||
+    desiredItems.length === 0
   ) {
     return NextResponse.json({ error: "Missing or invalid fields" }, { status: 400 });
   }
@@ -24,10 +25,10 @@ export async function POST(request: NextRequest) {
 
     const { returnRequest, decision } = await submitReturnRequest({
       order,
-      type,
       reason,
       notes: typeof notes === "string" ? notes : undefined,
       items,
+      desiredItems,
       photoUrls: Array.isArray(photoUrls) ? photoUrls : [],
     });
 

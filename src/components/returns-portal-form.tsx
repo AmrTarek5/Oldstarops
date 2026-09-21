@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import type { OrderLineItem } from "@/lib/types";
+import { useEffect, useState } from "react";
+import type { DesiredItem, OrderLineItem } from "@/lib/types";
+import type { PublicProduct } from "@/app/api/public/products/route";
 
 interface LookupResult {
   order: {
@@ -33,13 +34,62 @@ export default function ReturnsPortalForm({
   const [lookup, setLookup] = useState<LookupResult | null>(null);
 
   const [selected, setSelected] = useState<Record<number, boolean>>({});
-  const [type, setType] = useState<"return" | "exchange">("return");
   const [reason, setReason] = useState("");
   const [customReason, setCustomReason] = useState("");
   const [notes, setNotes] = useState("");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+
+  const [products, setProducts] = useState<PublicProduct[]>([]);
+  const [desiredItems, setDesiredItems] = useState<DesiredItem[]>([]);
+  const [pickProductId, setPickProductId] = useState("");
+  const [pickOptions, setPickOptions] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch("/api/public/products")
+      .then((res) => res.json())
+      .then((data) => setProducts(data.products ?? []))
+      .catch(() => undefined);
+  }, []);
+
+  const pickProduct = products.find((p) => p.productId === pickProductId) ?? null;
+  const pickOptionNames = pickProduct?.variants[0]?.options.map((o) => o.name) ?? [];
+  const pickMatchedVariant = pickProduct?.variants.find(
+    (v) =>
+      v.options.length === pickOptionNames.length &&
+      v.options.every((o) => pickOptions[o.name] === o.value)
+  );
+
+  function optionValuesFor(name: string) {
+    if (!pickProduct) return [];
+    const values = new Set<string>();
+    for (const v of pickProduct.variants) {
+      const match = v.options.find((o) => o.name === name);
+      if (match) values.add(match.value);
+    }
+    return Array.from(values);
+  }
+
+  function addDesiredItem() {
+    if (!pickProduct || !pickMatchedVariant) return;
+    setDesiredItems((prev) => [
+      ...prev,
+      {
+        variant_id: pickMatchedVariant.variantId,
+        product_title: pickProduct.productTitle,
+        options: pickMatchedVariant.options,
+        sku: pickMatchedVariant.sku,
+        quantity: 1,
+      },
+    ]);
+    setPickProductId("");
+    setPickOptions({});
+  }
+
+  function removeDesiredItem(idx: number) {
+    setDesiredItems((prev) => prev.filter((_, i) => i !== idx));
+  }
 
   async function verify(e: React.FormEvent) {
     e.preventDefault();
@@ -91,6 +141,10 @@ export default function ReturnsPortalForm({
       setError("Select at least one item");
       return;
     }
+    if (desiredItems.length === 0) {
+      setError("Choose what you'd like instead");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -100,10 +154,10 @@ export default function ReturnsPortalForm({
         body: JSON.stringify({
           orderNumber,
           email,
-          type,
           reason: reason === "other" ? customReason : reason,
           notes,
           items,
+          desiredItems,
           photoUrls,
         }),
       });
@@ -193,16 +247,74 @@ export default function ReturnsPortalForm({
       </div>
 
       <div>
-        <p className="text-sm font-medium mb-2">Type</p>
-        <div className="flex gap-4 text-sm">
-          <label className="flex items-center gap-1">
-            <input type="radio" checked={type === "return"} onChange={() => setType("return")} />
-            Return for refund
-          </label>
-          <label className="flex items-center gap-1">
-            <input type="radio" checked={type === "exchange"} onChange={() => setType("exchange")} />
-            Exchange
-          </label>
+        <p className="text-sm font-medium mb-2">What would you like instead?</p>
+        <p className="text-xs text-neutral-500 mb-3">We only offer exchanges — pick the product, color and size you&apos;d like to receive.</p>
+
+        {desiredItems.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {desiredItems.map((d, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between text-sm bg-neutral-50 rounded-lg px-3 py-2"
+              >
+                <span>
+                  {d.product_title}
+                  {d.options.length > 0 && ` — ${d.options.map((o) => o.value).join(" / ")}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeDesiredItem(idx)}
+                  className="text-xs text-neutral-400 hover:text-red-600"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="border border-neutral-200 rounded-lg p-3 space-y-2">
+          <select
+            value={pickProductId}
+            onChange={(e) => {
+              setPickProductId(e.target.value);
+              setPickOptions({});
+            }}
+            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm"
+          >
+            <option value="">Select a product…</option>
+            {products.map((p) => (
+              <option key={p.productId} value={p.productId}>
+                {p.productTitle}
+              </option>
+            ))}
+          </select>
+
+          {pickProduct &&
+            pickOptionNames.map((name) => (
+              <select
+                key={name}
+                value={pickOptions[name] ?? ""}
+                onChange={(e) => setPickOptions((prev) => ({ ...prev, [name]: e.target.value }))}
+                className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm"
+              >
+                <option value="">{name}…</option>
+                {optionValuesFor(name).map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            ))}
+
+          <button
+            type="button"
+            onClick={addDesiredItem}
+            disabled={!pickMatchedVariant}
+            className="w-full rounded-lg border border-neutral-300 py-1.5 text-xs font-medium disabled:opacity-40"
+          >
+            Add to exchange
+          </button>
         </div>
       </div>
 

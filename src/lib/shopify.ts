@@ -211,7 +211,9 @@ export interface ShopifyVariantNode {
   price: string;
   inventoryQuantity: number | null;
   inventoryItem: { unitCost: { amount: string } | null };
-  product: { id: string; title: string };
+  product: { id: string; title: string; featuredImage: { url: string } | null };
+  selectedOptions: Array<{ name: string; value: string }>;
+  image: { url: string } | null;
 }
 
 const VARIANTS_QUERY = `
@@ -227,7 +229,9 @@ const VARIANTS_QUERY = `
           price
           inventoryQuantity
           inventoryItem { unitCost { amount } }
-          product { id title }
+          product { id title featuredImage { url } }
+          selectedOptions { name value }
+          image { url }
         }
       }
       pageInfo { hasNextPage }

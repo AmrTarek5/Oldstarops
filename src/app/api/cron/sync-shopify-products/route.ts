@@ -17,6 +17,8 @@ function mapVariant(node: ShopifyVariantNode): InventorySnapshotRow {
     product_id: idFromGid(node.product.id),
     product_title: node.product.title,
     variant_title: node.title === "Default Title" ? null : node.title,
+    options: node.selectedOptions ?? [],
+    image_url: node.image?.url ?? node.product.featuredImage?.url ?? null,
     stock_qty: node.inventoryQuantity ?? 0,
     cost: Number(node.inventoryItem.unitCost?.amount) || 0,
     retail_price: Number(node.price) || 0,
