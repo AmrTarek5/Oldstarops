@@ -191,7 +191,19 @@ const DELIVERY_TYPE_TO_ESTIMATE_TYPE: Record<number, EstimateDeliveryType> = {
  * Estimates what Bosta would charge for a delivery via their pricing
  * calculator (GET /pricing/shipment/calculator) - confirmed live, e.g. a
  * Cairo->Cairo SEND with cod=100 returned `shippingFee: 75`,
- * `priceAfterVat: 85.5` (14% VAT).
+ * `priceAfterVat: 85.5` (14% VAT), plus two more per-delivery line items
+ * both flagged active in OldStar's plan (`tier.configurations`):
+ * `bostaMaterialFee.amount: 55` and `tier.openingPackageFee.amount: 7`
+ * (opening-package fee applies since deliveries are created with
+ * `allowToOpenPackage: true`, matching OldStar's real ones). The total
+ * returned here is `priceAfterVat + bostaMaterialFee + openingPackageFee`.
+ *
+ * Still an approximation, not a real invoice: it's unconfirmed whether VAT
+ * applies to the material/opening-package add-ons too (the response
+ * doesn't show a VAT-inclusive version of them, so they're added as flat
+ * amounts), and `tier.pickupFee` (70 EGP, with a
+ * `numberOfOrdersThreshold: 2`) looks like it's amortized across a whole
+ * pickup batch rather than charged per delivery, so it's excluded here.
  *
  * This is an ESTIMATE based on OldStar's plan/tier and route, not the
  * actual billed amount - Bosta doesn't expose that per-delivery (the
@@ -219,9 +231,19 @@ export async function estimateShippingFee(params: {
     const res = await bostaFetch(`/pricing/shipment/calculator?${search.toString()}`);
     const json = (await res.json()) as {
       success: boolean;
-      data?: { priceAfterVat?: number };
+      data?: {
+        priceAfterVat?: number;
+        tier?: {
+          bostaMaterialFee?: { amount?: number };
+          openingPackageFee?: { amount?: number };
+        };
+      };
     };
-    return json.success && typeof json.data?.priceAfterVat === "number" ? json.data.priceAfterVat : null;
+    if (!json.success || typeof json.data?.priceAfterVat !== "number") return null;
+
+    const materialFee = json.data.tier?.bostaMaterialFee?.amount ?? 0;
+    const openingFee = json.data.tier?.openingPackageFee?.amount ?? 0;
+    return json.data.priceAfterVat + materialFee + openingFee;
   } catch {
     return null;
   }
