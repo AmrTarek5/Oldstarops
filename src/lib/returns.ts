@@ -99,15 +99,17 @@ export async function createPickupForReturn(returnId: string) {
       orderReference: orderRow.order_number,
       customerName: orderRow.customer_name ?? "Customer",
       customerPhone: orderRow.customer_phone ?? "",
+      customerEmail: orderRow.customer_email ?? undefined,
       customerAddress: orderRow.shipping_address ?? "",
       city: orderRow.shipping_city ?? "",
       packageDescription: returnRow.items.map((i) => `${i.quantity}x ${i.title}`).join(", "),
+      itemsCount: returnRow.items.reduce((sum, i) => sum + i.quantity, 0),
       notes: returnRow.notes ?? undefined,
     });
 
     const { data: updated, error: updateError } = await db
       .from("return_requests")
-      .update({ bosta_pickup_id: pickup._id })
+      .update({ bosta_pickup_id: pickup.data._id })
       .eq("id", returnId)
       .select()
       .single();

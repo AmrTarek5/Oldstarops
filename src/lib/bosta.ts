@@ -205,45 +205,79 @@ export async function fetchDeliveriesPage(params: DeliverySearchFilter) {
 }
 
 /**
- * Creates a reverse-pickup delivery for a return/exchange.
- * VERIFY: real payload fields — never live-tested (only /deliveries/search
- * has been). Live orders show OldStar currently creates these manually as
- * "Exchange" (type.code 30) deliveries from the Bosta dashboard rather
- * than via API, so this payload shape is still a best guess.
+ * Creates a return/exchange delivery via Bosta's "Create delivery" endpoint
+ * (POST /deliveries), payload confirmed against docs.bosta.co's own
+ * example. Two things this couldn't fully resolve yet:
+ *
+ *   1. `type`: the request takes a NUMERIC code here (unlike the string
+ *      enum /deliveries/search's `type` filter takes). We don't have a
+ *      confirmed code for a pure customer-return-for-refund. What IS
+ *      confirmed from real OldStar deliveries: every return/exchange
+ *      pickup they've actually created (via the Bosta dashboard, not this
+ *      API) used type code 30 ("Exchange") - including ones that read as
+ *      plain returns from the notes. So this uses 30 for both `return` and
+ *      `exchange` request types until/unless a dedicated return code turns
+ *      up. Address orientation matches those real deliveries too:
+ *      pickupAddress is the warehouse, dropOffAddress is the customer -
+ *      i.e. the courier still starts at the warehouse and the
+ *      pickup-the-old-item leg happens during that same customer visit,
+ *      not as a separate reversed trip.
+ *   2. `zoneId`/`districtId`: Bosta's addresses want its own internal zone
+ *      and district IDs, not just a free-text city/address, and we only
+ *      have plain text synced from Shopify's shipping address. Left
+ *      undefined here - if Bosta's API rejects the call for missing these,
+ *      the next step is finding a "list zones/districts" endpoint in their
+ *      docs to resolve a Shopify city name to Bosta's IDs.
  */
 export async function createReturnPickup(input: {
   orderReference: string;
   customerName: string;
   customerPhone: string;
+  customerEmail?: string;
   customerAddress: string;
   city: string;
   notes?: string;
   packageDescription: string;
+  itemsCount?: number;
 }) {
+  const [firstName, ...rest] = input.customerName.trim().split(/\s+/);
+  const lastName = rest.join(" ") || "-";
+
+  const warehouseAddress = {
+    city: process.env.BOSTA_WAREHOUSE_CITY || "Cairo",
+    zoneId: process.env.BOSTA_WAREHOUSE_ZONE_ID || undefined,
+    districtId: process.env.BOSTA_WAREHOUSE_DISTRICT_ID || undefined,
+    firstLine: process.env.BOSTA_WAREHOUSE_ADDRESS || "",
+  };
+
   const res = await bostaFetch("/deliveries", {
     method: "POST",
     body: JSON.stringify({
-      type: "CUSTOMER_RETURN_PICKUP", // VERIFY: real type value/code
-      orderReference: input.orderReference,
-      notes: input.notes,
-      dropOffAddress: {
-        // OldStar warehouse — set via env or portal settings once confirmed
-        city: process.env.BOSTA_WAREHOUSE_CITY || "Cairo",
-      },
-      receiver: {
-        fullName: input.customerName,
-        phone: input.customerPhone,
-      },
-      pickupAddress: {
-        city: input.city,
-        line1: input.customerAddress,
-      },
+      type: 30, // "Exchange" - see note above
       specs: {
+        packageType: "Parcel",
+        size: "SMALL",
         packageDetails: {
+          itemsCount: input.itemsCount ?? 1,
           description: input.packageDescription,
         },
       },
+      notes: input.notes,
+      cod: 0,
+      pickupAddress: warehouseAddress,
+      dropOffAddress: {
+        city: input.city,
+        firstLine: input.customerAddress,
+      },
+      businessReference: input.orderReference,
+      allowToOpenPackage: true,
+      receiver: {
+        firstName: firstName || input.customerName,
+        lastName,
+        phone: input.customerPhone,
+        email: input.customerEmail,
+      },
     }),
   });
-  return (await res.json()) as { _id: string; trackingNumber: string };
+  return (await res.json()) as { success: boolean; data: { _id: string; trackingNumber: string } };
 }
