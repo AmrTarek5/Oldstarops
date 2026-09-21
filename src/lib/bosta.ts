@@ -223,11 +223,12 @@ export async function fetchDeliveriesPage(params: DeliverySearchFilter) {
  *      pickup-the-old-item leg happens during that same customer visit,
  *      not as a separate reversed trip.
  *   2. `zoneId`/`districtId`: Bosta's addresses want its own internal zone
- *      and district IDs, not just a free-text city/address, and we only
- *      have plain text synced from Shopify's shipping address. Left
- *      undefined here - if Bosta's API rejects the call for missing these,
- *      the next step is finding a "list zones/districts" endpoint in their
- *      docs to resolve a Shopify city name to Bosta's IDs.
+ *      and district IDs, not just a free-text city/address. RESOLVED for
+ *      OldStar's actual warehouse - every one of OldStar's real outbound
+ *      deliveries carries the same pickupAddress, so the IDs below are
+ *      read directly from that live data (zone "ElShorouk", district
+ *      "Zone 4 (ElShorouk)"), not guessed. Still overridable via env vars
+ *      in case the registered pickup location ever changes.
  */
 export async function createReturnPickup(input: {
   orderReference: string;
@@ -243,11 +244,15 @@ export async function createReturnPickup(input: {
   const [firstName, ...rest] = input.customerName.trim().split(/\s+/);
   const lastName = rest.join(" ") || "-";
 
+  // Defaults are OldStar's real registered warehouse/pickup location,
+  // read from live delivery data (see docstring above).
   const warehouseAddress = {
     city: process.env.BOSTA_WAREHOUSE_CITY || "Cairo",
-    zoneId: process.env.BOSTA_WAREHOUSE_ZONE_ID || undefined,
-    districtId: process.env.BOSTA_WAREHOUSE_DISTRICT_ID || undefined,
-    firstLine: process.env.BOSTA_WAREHOUSE_ADDRESS || "",
+    zoneId: process.env.BOSTA_WAREHOUSE_ZONE_ID || "BOGhk97qy3h", // "ElShorouk"
+    districtId: process.env.BOSTA_WAREHOUSE_DISTRICT_ID || "DLrX9h0eFS0w7WDLoVlXp", // "Zone 4 (ElShorouk)"
+    firstLine: process.env.BOSTA_WAREHOUSE_ADDRESS || "المنطقه الرابعه المجاوره التانيه",
+    buildingNumber: process.env.BOSTA_WAREHOUSE_BUILDING || "83",
+    floor: process.env.BOSTA_WAREHOUSE_FLOOR || "0",
   };
 
   const res = await bostaFetch("/deliveries", {
