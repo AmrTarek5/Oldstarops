@@ -164,6 +164,7 @@ export interface BostaDelivery {
   };
   cod: number;
   pricing?: Record<string, unknown>;
+  dropOffAddress?: { city?: { name?: string } };
   businessReference?: string; // "<shopify-store-handle>:#<order number>"
   uniqueBusinessReference?: string;
   shopifyInfo?: {
@@ -173,6 +174,87 @@ export interface BostaDelivery {
     createdAt: string;
   };
   updatedAt: string; // non-ISO Date#toString() format - parse with `new Date(...)`
+}
+
+type EstimateDeliveryType = "SEND" | "CASH_COLLECTION" | "CUSTOMER_RETURN_PICKUP" | "EXCHANGE" | "SIGN_AND_RETURN";
+
+// Delivery `type.code` (from a real delivery, see BostaDelivery.type) ->
+// the pricing calculator's type enum, which doesn't have an RTO option -
+// CUSTOMER_RETURN_PICKUP is the closest reverse-logistics analog for one.
+const DELIVERY_TYPE_TO_ESTIMATE_TYPE: Record<number, EstimateDeliveryType> = {
+  10: "SEND",
+  20: "CUSTOMER_RETURN_PICKUP",
+  30: "EXCHANGE",
+};
+
+/**
+ * Estimates what Bosta would charge for a delivery via their pricing
+ * calculator (GET /pricing/shipment/calculator) - confirmed live, e.g. a
+ * Cairo->Cairo SEND with cod=100 returned `shippingFee: 75`,
+ * `priceAfterVat: 85.5` (14% VAT).
+ *
+ * This is an ESTIMATE based on OldStar's plan/tier and route, not the
+ * actual billed amount - Bosta doesn't expose that per-delivery (the
+ * `pricing` field has been empty on every real delivery seen so far, see
+ * `extractBostaFee`). Used as a fallback for the Shipping Reconciliation
+ * `bosta_fee` figure when no real pricing data is available. Best-effort:
+ * returns null rather than throwing, so a pricing hiccup never blocks the
+ * delivery sync itself.
+ */
+export async function estimateShippingFee(params: {
+  pickupCity: string;
+  dropOffCity: string;
+  type: EstimateDeliveryType;
+  size?: "Normal" | "Light Bulky" | "Heavy Bulky";
+  cod?: number;
+}): Promise<number | null> {
+  try {
+    const search = new URLSearchParams({
+      pickupCity: params.pickupCity,
+      dropOffCity: params.dropOffCity,
+      type: params.type,
+      size: params.size ?? "Normal",
+      cod: String(params.cod ?? 0),
+    });
+    const res = await bostaFetch(`/pricing/shipment/calculator?${search.toString()}`);
+    const json = (await res.json()) as {
+      success: boolean;
+      data?: { priceAfterVat?: number };
+    };
+    return json.success && typeof json.data?.priceAfterVat === "number" ? json.data.priceAfterVat : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves the fee to record for a delivery: prefers real data from the
+ * delivery's own `pricing` field, falls back to a live pricing-calculator
+ * estimate, falls back to 0. `cache` lets a sync run reuse estimates
+ * across deliveries with the same destination city/type instead of
+ * calling the calculator once per delivery.
+ */
+export async function resolveBostaFee(
+  delivery: BostaDelivery,
+  warehouseCity: string,
+  cache: Map<string, number | null>
+): Promise<number> {
+  const realFee = extractBostaFee(delivery.pricing);
+  if (realFee > 0) return realFee;
+
+  const dropOffCity = delivery.dropOffAddress?.city?.name || warehouseCity;
+  const estimateType = DELIVERY_TYPE_TO_ESTIMATE_TYPE[delivery.type?.code ?? 10] ?? "SEND";
+  const cacheKey = `${dropOffCity}|${estimateType}`;
+
+  if (!cache.has(cacheKey)) {
+    const estimate = await estimateShippingFee({
+      pickupCity: warehouseCity,
+      dropOffCity,
+      type: estimateType,
+    });
+    cache.set(cacheKey, estimate);
+  }
+  return cache.get(cacheKey) ?? 0;
 }
 
 export interface DeliverySearchFilter {

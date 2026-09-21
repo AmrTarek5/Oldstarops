@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCronSecret } from "@/lib/cron-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { fetchDeliveriesPage, mapBostaState, extractBostaFee, type BostaDelivery } from "@/lib/bosta";
+import { fetchDeliveriesPage, mapBostaState, resolveBostaFee, type BostaDelivery } from "@/lib/bosta";
 import type { DeliveryRow, SyncStateRow } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -37,14 +37,18 @@ async function resolveOrderId(db: ReturnType<typeof supabaseAdmin>, delivery: Bo
   return byNumber.data?.id ?? null;
 }
 
-function mapDelivery(d: BostaDelivery, orderId: string | null): Omit<DeliveryRow, "resolution" | "resolved_at"> {
+async function mapDelivery(
+  d: BostaDelivery,
+  orderId: string | null,
+  feeCache: Map<string, number | null>
+): Promise<Omit<DeliveryRow, "resolution" | "resolved_at">> {
   return {
     id: d._id,
     order_id: orderId,
     tracking_number: d.trackingNumber,
     status: mapBostaState(d),
     cod_amount: Number(d.cod) || 0,
-    bosta_fee: extractBostaFee(d.pricing),
+    bosta_fee: await resolveBostaFee(d, process.env.BOSTA_WAREHOUSE_CITY || "Cairo", feeCache),
     delivered_at: d.state.deliveryTime ?? null,
     raw: d as unknown as Record<string, unknown>,
     created_at: new Date(d.updatedAt).toISOString(),
@@ -72,6 +76,9 @@ export async function GET(request: NextRequest) {
   let pagesFetched = 0;
   let deliveriesUpserted = 0;
   let hasMore = false;
+  // Reused across the whole run so deliveries to the same city/type only
+  // hit the pricing calculator once (see resolveBostaFee).
+  const feeCache = new Map<string, number | null>();
 
   try {
     do {
@@ -85,7 +92,7 @@ export async function GET(request: NextRequest) {
         const rows: Omit<DeliveryRow, "resolution" | "resolved_at">[] = [];
         for (const d of result.deliveries) {
           const orderId = await resolveOrderId(db, d);
-          rows.push(mapDelivery(d, orderId));
+          rows.push(await mapDelivery(d, orderId, feeCache));
         }
         const { error } = await db.from("deliveries").upsert(rows, { onConflict: "id" });
         if (error) throw new Error(`Supabase upsert failed: ${error.message}`);
