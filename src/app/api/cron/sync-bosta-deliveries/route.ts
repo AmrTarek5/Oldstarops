@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCronSecret } from "@/lib/cron-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { fetchDeliveriesPage, mapBostaState, type BostaDelivery } from "@/lib/bosta";
+import { fetchDeliveriesPage, mapBostaState, extractBostaFee, type BostaDelivery } from "@/lib/bosta";
 import type { DeliveryRow, SyncStateRow } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -9,15 +9,25 @@ export const maxDuration = 60;
 const SYNC_KEY = "bosta_deliveries";
 const MAX_PAGES_PER_RUN = 5;
 
-async function resolveOrderId(
-  db: ReturnType<typeof supabaseAdmin>,
-  businessReference: string | undefined
-) {
-  if (!businessReference) return null;
-  const cleaned = businessReference.replace(/^#/, "");
+async function resolveOrderId(db: ReturnType<typeof supabaseAdmin>, delivery: BostaDelivery) {
+  // Prefer shopifyInfo.orderId - a direct match to orders.id when the
+  // delivery was created from a Shopify order.
+  if (delivery.shopifyInfo?.orderId) {
+    const byId = await db
+      .from("orders")
+      .select("id")
+      .eq("id", delivery.shopifyInfo.orderId)
+      .maybeSingle();
+    if (byId.data) return byId.data.id as string;
+  }
 
-  const byId = await db.from("orders").select("id").eq("id", cleaned).maybeSingle();
-  if (byId.data) return byId.data.id as string;
+  // Fall back to businessReference, formatted "<shopify-store-handle>:#<order number>"
+  // - the only link available for deliveries created manually in the Bosta
+  // dashboard (e.g. exchange pickups), which have no shopifyInfo.
+  const ref = delivery.businessReference ?? delivery.uniqueBusinessReference;
+  if (!ref) return null;
+  const cleaned = ref.split(":").pop()?.replace(/^#/, "");
+  if (!cleaned) return null;
 
   const byNumber = await db
     .from("orders")
@@ -32,12 +42,12 @@ function mapDelivery(d: BostaDelivery, orderId: string | null): Omit<DeliveryRow
     id: d._id,
     order_id: orderId,
     tracking_number: d.trackingNumber,
-    status: mapBostaState(d.state),
+    status: mapBostaState(d),
     cod_amount: Number(d.cod) || 0,
-    bosta_fee: Number(d.fees) || 0,
-    delivered_at: d.deliveredAt ?? null,
+    bosta_fee: extractBostaFee(d.pricing),
+    delivered_at: d.state.deliveryTime ?? null,
     raw: d as unknown as Record<string, unknown>,
-    created_at: d.updatedAt,
+    created_at: new Date(d.updatedAt).toISOString(),
     updated_at: new Date().toISOString(),
   };
 }
@@ -74,7 +84,7 @@ export async function GET(request: NextRequest) {
       if (result.deliveries.length > 0) {
         const rows: Omit<DeliveryRow, "resolution" | "resolved_at">[] = [];
         for (const d of result.deliveries) {
-          const orderId = await resolveOrderId(db, d.businessReference);
+          const orderId = await resolveOrderId(db, d);
           rows.push(mapDelivery(d, orderId));
         }
         const { error } = await db.from("deliveries").upsert(rows, { onConflict: "id" });
