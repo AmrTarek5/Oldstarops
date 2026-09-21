@@ -31,13 +31,24 @@ Vercel — everything on free tiers.
    app requests one itself via the OAuth client credentials grant, which
    only works because the app and store share an org. See
    `src/lib/shopify.ts` for the token-fetching logic.
-3. **Bosta**: get an API key from the Bosta merchant dashboard.
-   ⚠️ The Bosta client (`src/lib/bosta.ts`) was written without access to
-   Bosta's live API docs (no network access in the build sandbox) — the
-   endpoint paths, auth header format, and delivery status codes are
-   best-effort based on commonly documented Bosta v2 patterns and are marked
-   `VERIFY` in that file. Confirm them against your Bosta merchant API
-   reference before relying on the delivery sync or return-pickup automation.
+3. **Bosta**: get an API key from
+   `https://business.bosta.co/settings/api-integration`. Send it as the raw
+   `Authorization` header value with **no `Bearer` prefix** — Bosta support
+   confirmed this directly; their own docs page's "Bearer Auth" label is
+   wrong for this key type. If a freshly generated key still returns
+   `errorCode: 1028 "Invalid authorization token or API key"`, that's not a
+   formatting issue on our end — open a support ticket with Bosta, the
+   account/key needs enabling on their side.
+
+   The delivery sync (`src/lib/bosta.ts`) has been verified against a real,
+   successful `/deliveries/search` call, so the endpoint, auth format, and
+   response shape (including real delivery state codes) are confirmed, not
+   guessed. What's still unverified: the exact payload for creating a
+   return pickup (`createReturnPickup` — a different endpoint, never
+   live-tested; OldStar currently creates these manually as "Exchange"
+   deliveries from the Bosta dashboard) and the `bosta_fee` field name
+   (every delivery seen so far had an empty `pricing` object). Both are
+   marked `VERIFY` in that file.
 4. **Anthropic**: get an API key from the Claude console for the AI photo
    review feature.
 5. Copy `.env.example` to `.env.local` and fill in all values, including a
