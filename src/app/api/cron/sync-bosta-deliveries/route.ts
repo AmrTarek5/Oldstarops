@@ -7,7 +7,12 @@ import type { DeliveryRow, SyncStateRow } from "@/lib/types";
 export const maxDuration = 60;
 
 const SYNC_KEY = "bosta_deliveries";
-const MAX_PAGES_PER_RUN = 5;
+// Each page is now up to 200 records (the real server cap, confirmed via a
+// body-based limit:500 request getting capped to 200) instead of the old
+// 50, and every record does a DB lookup (resolveOrderId) plus a possible
+// pricing-calculator call, so one page per run keeps well inside the 60s
+// function budget.
+const MAX_PAGES_PER_RUN = 1;
 
 async function resolveOrderId(db: ReturnType<typeof supabaseAdmin>, delivery: BostaDelivery) {
   // Prefer shopifyInfo.orderId - a direct match to orders.id when the
@@ -100,7 +105,7 @@ export async function GET(request: NextRequest) {
       // No confirmed date-range filter on Bosta's search endpoint, so each
       // sweep re-pages through everything - upserts de-dupe by id, so this
       // is just less efficient than a true incremental sync, not incorrect.
-      const result = await fetchDeliveriesPage({ page, limit: 100 });
+      const result = await fetchDeliveriesPage({ page, limit: 200 });
       pagesFetched += 1;
 
       const currentIds = result.deliveries.map((d) => d._id);

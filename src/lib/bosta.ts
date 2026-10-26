@@ -282,14 +282,22 @@ export interface DeliverySearchFilter {
   limit?: number;
 }
 
-/** Pulls deliveries matching an optional filter, paginated via query string (page/limit). */
+/**
+ * Pulls deliveries matching an optional filter. `page`/`limit` go in the
+ * JSON body, not the query string - the query string versions are silently
+ * ignored (observed: ?page=2&limit=100 always returns the same ~50 "page
+ * 1" results). Body-based limit is honored up to a real server cap of 200
+ * (observed: requesting limit:500 in the body got capped to 200, not 50).
+ */
 export async function fetchDeliveriesPage(params: DeliverySearchFilter) {
-  const limit = params.limit ?? 100;
+  const limit = params.limit ?? 200;
   const page = params.page ?? 1;
 
-  const res = await bostaFetch(`/deliveries/search?page=${page}&limit=${limit}`, {
+  const res = await bostaFetch(`/deliveries/search`, {
     method: "POST",
     body: JSON.stringify({
+      page,
+      limit,
       ...(params.stateCodes ? { stateCodes: params.stateCodes } : {}),
     }),
   });
