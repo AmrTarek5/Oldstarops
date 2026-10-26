@@ -72,10 +72,21 @@ export async function GET(request: NextRequest) {
   const sweepStartedAt =
     (syncState?.meta?.sweep_started_at as string | undefined) || new Date().toISOString();
   let page = (syncState?.meta?.page as number | undefined) ?? 1;
+  // Bosta's pagination doesn't reliably terminate - past the real end of
+  // the account's deliveries it keeps returning full pages instead of a
+  // shrinking final page (observed: 25+ consecutive pages of exactly 50
+  // results each). A full page can no longer be trusted to mean "more
+  // data exists", so we also track the previous page's delivery ids
+  // (carried across invocations via sync_state.meta) and stop as soon as
+  // a new page is mostly the same ids as the one before it.
+  let previousPageIds = new Set<string>(
+    (syncState?.meta?.lastPageIds as string[] | undefined) ?? []
+  );
 
   let pagesFetched = 0;
   let deliveriesUpserted = 0;
   let hasMore = false;
+  let hitRepeat = false;
   // Reused across the whole run so deliveries to the same city/type only
   // hit the pricing calculator once (see resolveBostaFee).
   const feeCache = new Map<string, number | null>();
@@ -88,6 +99,18 @@ export async function GET(request: NextRequest) {
       const result = await fetchDeliveriesPage({ page, limit: 100 });
       pagesFetched += 1;
 
+      const currentIds = result.deliveries.map((d) => d._id);
+      const overlap = currentIds.filter((id) => previousPageIds.has(id)).length;
+      hitRepeat =
+        previousPageIds.size > 0 &&
+        currentIds.length > 0 &&
+        overlap / currentIds.length >= 0.8;
+
+      if (hitRepeat) {
+        hasMore = false;
+        break;
+      }
+
       if (result.deliveries.length > 0) {
         const rows: Omit<DeliveryRow, "resolution" | "resolved_at">[] = [];
         for (const d of result.deliveries) {
@@ -99,6 +122,7 @@ export async function GET(request: NextRequest) {
         deliveriesUpserted += rows.length;
       }
 
+      previousPageIds = new Set(currentIds);
       hasMore = Boolean(result.hasMore);
       page += 1;
     } while (hasMore && pagesFetched < MAX_PAGES_PER_RUN);
@@ -110,12 +134,20 @@ export async function GET(request: NextRequest) {
         key: SYNC_KEY,
         cursor: sweepComplete ? null : "in_progress",
         last_synced_at: sweepComplete ? sweepStartedAt : syncState?.last_synced_at ?? null,
-        meta: sweepComplete ? {} : { sweep_started_at: sweepStartedAt, page },
+        meta: sweepComplete
+          ? {}
+          : { sweep_started_at: sweepStartedAt, page, lastPageIds: Array.from(previousPageIds) },
       },
       { onConflict: "key" }
     );
 
-    return NextResponse.json({ ok: true, pagesFetched, deliveriesUpserted, sweepComplete });
+    return NextResponse.json({
+      ok: true,
+      pagesFetched,
+      deliveriesUpserted,
+      sweepComplete,
+      stoppedOnRepeat: hitRepeat,
+    });
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err) },
