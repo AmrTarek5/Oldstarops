@@ -1,6 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import {
-  BOSTA_REMITTANCE_GRACE_DAYS,
   BULK_ORDER_MIN_ITEMS,
   FLEX_FEE_TITLE_PATTERNS,
   RETURN_PICKUP_FLAT_FEE_ESTIMATE,
@@ -163,12 +162,12 @@ export async function getBulkOrders(days = 30) {
 export async function getCashFlow(days = 30) {
   const db = supabaseAdmin();
   const since = daysAgoIso(days);
-  const remittanceCutoff = daysAgoIso(BOSTA_REMITTANCE_GRACE_DAYS);
+  const now = new Date().toISOString();
 
   const [deliveredRes, feesRes, returnsRes, codOrdersRes] = await Promise.all([
     db
       .from("deliveries")
-      .select("cod_amount, delivered_at")
+      .select("cod_amount, delivered_at, raw")
       .eq("status", "delivered")
       .gte("delivered_at", since),
     db.from("deliveries").select("bosta_fee").gte("created_at", since),
@@ -191,11 +190,30 @@ export async function getCashFlow(days = 30) {
   let codLive = 0;
   let codSettled = 0;
   for (const row of deliveredRes.data ?? []) {
-    const amount = Number(row.cod_amount) || 0;
-    if (row.delivered_at && row.delivered_at >= remittanceCutoff) {
-      codLive += amount;
+    const raw = (row.raw ?? {}) as {
+      flexShippingInfo?: { isAmountCollected?: boolean; collectedAmount?: number };
+      paymentInfo?: { amount?: number; capturedStatus?: string };
+      cashoutInfo?: { expectedCashoutDate?: string };
+    };
+
+    // Bosta's own reported collected amount (actual cash the courier took,
+    // or the captured online payment) is more accurate than the order's
+    // nominal COD due amount - e.g. it's 0 if the customer refused to pay.
+    const collected =
+      (raw.flexShippingInfo?.isAmountCollected ? raw.flexShippingInfo.collectedAmount : undefined) ??
+      (raw.paymentInfo?.capturedStatus === "SUCCEEDED" ? raw.paymentInfo.amount : undefined) ??
+      (Number(row.cod_amount) || 0);
+
+    // Bosta's own expected cashout date (when they actually pay this
+    // delivery's collected cash to the business) replaces the previous
+    // guessed 3-day grace period.
+    const expectedCashout = raw.cashoutInfo?.expectedCashoutDate;
+    const alreadySettled = Boolean(expectedCashout && expectedCashout <= now);
+
+    if (alreadySettled) {
+      codSettled += collected;
     } else {
-      codSettled += amount;
+      codLive += collected;
     }
   }
 

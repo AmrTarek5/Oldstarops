@@ -174,6 +174,21 @@ export interface BostaDelivery {
     createdAt: string;
   };
   updatedAt: string; // non-ISO Date#toString() format - parse with `new Date(...)`
+  // Real per-delivery payment/settlement data (confirmed present on live
+  // deliveries, unlike `pricing` which is always empty) - used instead of
+  // guessing from the order's nominal COD amount.
+  flexShippingInfo?: {
+    isAmountCollected?: boolean;
+    collectedAmount?: number;
+    status?: string;
+  };
+  paymentInfo?: {
+    amount?: number;
+    capturedStatus?: string; // e.g. "SUCCEEDED"
+  };
+  cashoutInfo?: {
+    expectedCashoutDate?: string; // when Bosta pays this delivery's collected cash out to the business
+  };
 }
 
 type EstimateDeliveryType = "SEND" | "CASH_COLLECTION" | "CUSTOMER_RETURN_PICKUP" | "EXCHANGE" | "SIGN_AND_RETURN";

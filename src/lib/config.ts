@@ -18,14 +18,6 @@ export const BULK_ORDER_MIN_ITEMS = 3;
 export const FLEX_FEE_TITLE_PATTERNS = [/flex fee/i, /cod fee/i, /delivery fee/i];
 
 /**
- * Bosta doesn't tell us when COD cash is actually remitted to the merchant
- * (no remittance data in the schema yet). As a rough proxy, COD collected
- * more than this many days ago is treated as "settled"; more recent is
- * "live" (collected by the courier, not yet in OldStar's account).
- */
-export const BOSTA_REMITTANCE_GRACE_DAYS = 3;
-
-/**
  * Fallback estimated Bosta fee for a return pickup when return_requests.pickup_fee
  * hasn't been recorded (e.g. pickup automation not wired to a real fee yet).
  */

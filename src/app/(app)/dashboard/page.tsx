@@ -83,22 +83,34 @@ export default async function DashboardPage({
         <h2 className="text-sm font-semibold text-neutral-700 mb-3">Cash flow (last 30 days)</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <StatTile
-            label="COD collected — live"
+            label="COD collected, not yet paid out"
             value={formatMoney(cashFlow.codLive)}
-            sub="Collected by courier, not yet settled"
+            sub="Collected by courier; Bosta hasn't cashed it out to you yet"
           />
           <StatTile
-            label="COD collected — settled"
+            label="COD collected & paid out"
             value={formatMoney(cashFlow.codSettled)}
             tone="positive"
+            sub="Already in your Bosta/bank balance"
           />
-          <StatTile label="Bosta fees owed" value={formatMoney(cashFlow.bostaFeesOwed)} tone="negative" />
           <StatTile
-            label="Return head-back shipping cost"
+            label="Est. Bosta shipping fees"
+            value={formatMoney(cashFlow.bostaFeesOwed)}
+            tone="negative"
+            sub="Estimate — Bosta's API doesn't return the real fee per delivery"
+          />
+          <StatTile
+            label="Est. return pickup cost"
             value={formatMoney(cashFlow.returnHeadbackShippingCost)}
             tone="negative"
+            sub="Estimate — no real per-pickup fee available"
           />
-          <StatTile label="Hidden costs total" value={formatMoney(cashFlow.hiddenCostsTotal)} tone="negative" />
+          <StatTile
+            label="Est. total hidden costs"
+            value={formatMoney(cashFlow.hiddenCostsTotal)}
+            tone="negative"
+            sub="Shipping fees + return pickups (both estimates)"
+          />
           <StatTile
             label="% paid flex/COD fee"
             value={formatPercent(cashFlow.flexFeePaidPct)}
