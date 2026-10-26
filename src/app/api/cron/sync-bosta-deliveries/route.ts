@@ -72,21 +72,25 @@ export async function GET(request: NextRequest) {
   const sweepStartedAt =
     (syncState?.meta?.sweep_started_at as string | undefined) || new Date().toISOString();
   let page = (syncState?.meta?.page as number | undefined) ?? 1;
-  // Bosta's pagination doesn't reliably terminate - past the real end of
-  // the account's deliveries it keeps returning full pages instead of a
-  // shrinking final page (observed: 25+ consecutive pages of exactly 50
-  // results each). A full page can no longer be trusted to mean "more
-  // data exists", so we also track the previous page's delivery ids
-  // (carried across invocations via sync_state.meta) and stop as soon as
-  // a new page is mostly the same ids as the one before it.
-  let previousPageIds = new Set<string>(
-    (syncState?.meta?.lastPageIds as string[] | undefined) ?? []
-  );
+  // Bosta's /deliveries/search results reorder between calls - almost
+  // certainly sorted by last-updated while couriers update statuses live,
+  // so the record at "page 5" today isn't the same record that'll be at
+  // "page 5" on the next call. Comparing only the immediately-previous
+  // page (an earlier attempt at this) gets fooled by that reshuffling and
+  // stops far too early. Tracking every unique delivery id seen across
+  // the WHOLE sweep (persisted across invocations) is immune to
+  // reordering: once an id has been seen, no amount of reshuffling can
+  // make it look new again, so this is guaranteed to converge once every
+  // real id has turned up at least once.
+  const seenIds = new Set<string>((syncState?.meta?.seenIds as string[] | undefined) ?? []);
+  let consecutiveEmptyPages =
+    (syncState?.meta?.consecutiveEmptyPages as number | undefined) ?? 0;
+  const EMPTY_PAGE_THRESHOLD = 10;
 
   let pagesFetched = 0;
   let deliveriesUpserted = 0;
-  let hasMore = false;
-  let hitRepeat = false;
+  let newRecordsFound = 0;
+  let hasMore = true;
   // Reused across the whole run so deliveries to the same city/type only
   // hit the pricing calculator once (see resolveBostaFee).
   const feeCache = new Map<string, number | null>();
@@ -100,16 +104,10 @@ export async function GET(request: NextRequest) {
       pagesFetched += 1;
 
       const currentIds = result.deliveries.map((d) => d._id);
-      const overlap = currentIds.filter((id) => previousPageIds.has(id)).length;
-      hitRepeat =
-        previousPageIds.size > 0 &&
-        currentIds.length > 0 &&
-        overlap / currentIds.length >= 0.8;
-
-      if (hitRepeat) {
-        hasMore = false;
-        break;
-      }
+      const newIds = currentIds.filter((id) => !seenIds.has(id));
+      consecutiveEmptyPages = newIds.length === 0 ? consecutiveEmptyPages + 1 : 0;
+      newRecordsFound += newIds.length;
+      for (const id of currentIds) seenIds.add(id);
 
       if (result.deliveries.length > 0) {
         const rows: Omit<DeliveryRow, "resolution" | "resolved_at">[] = [];
@@ -122,9 +120,8 @@ export async function GET(request: NextRequest) {
         deliveriesUpserted += rows.length;
       }
 
-      previousPageIds = new Set(currentIds);
-      hasMore = Boolean(result.hasMore);
       page += 1;
+      hasMore = consecutiveEmptyPages < EMPTY_PAGE_THRESHOLD;
     } while (hasMore && pagesFetched < MAX_PAGES_PER_RUN);
 
     const sweepComplete = !hasMore;
@@ -136,7 +133,12 @@ export async function GET(request: NextRequest) {
         last_synced_at: sweepComplete ? sweepStartedAt : syncState?.last_synced_at ?? null,
         meta: sweepComplete
           ? {}
-          : { sweep_started_at: sweepStartedAt, page, lastPageIds: Array.from(previousPageIds) },
+          : {
+              sweep_started_at: sweepStartedAt,
+              page,
+              seenIds: Array.from(seenIds),
+              consecutiveEmptyPages,
+            },
       },
       { onConflict: "key" }
     );
@@ -145,8 +147,9 @@ export async function GET(request: NextRequest) {
       ok: true,
       pagesFetched,
       deliveriesUpserted,
+      newRecordsFound,
+      totalUniqueSeen: seenIds.size,
       sweepComplete,
-      stoppedOnRepeat: hitRepeat,
     });
   } catch (err) {
     return NextResponse.json(
