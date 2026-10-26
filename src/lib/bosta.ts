@@ -299,9 +299,22 @@ export async function fetchDeliveriesPage(params: DeliverySearchFilter) {
   };
   const deliveries = json.data?.deliveries ?? [];
 
+  // Bosta may silently cap the real page size below the `limit` we asked
+  // for (observed: requesting 100 still returns 50), so comparing
+  // deliveries.length to our requested limit undercounts and stops the
+  // sweep after page 1. Use the server's own reported count/page/limit to
+  // tell whether more pages remain instead.
+  const serverCount = json.data?.count;
+  const serverLimit = json.data?.limit ?? deliveries.length;
+  const serverPage = json.data?.page ?? page;
+  const hasMore =
+    typeof serverCount === "number"
+      ? serverPage * serverLimit < serverCount
+      : deliveries.length > 0 && deliveries.length >= serverLimit;
+
   return {
     deliveries,
-    hasMore: deliveries.length === limit,
+    hasMore,
   };
 }
 
