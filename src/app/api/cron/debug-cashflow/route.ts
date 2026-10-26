@@ -85,6 +85,34 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Same collected/settled split, but across ALL delivered deliveries ever
+  // synced (no 30-day window) - this is the number that's actually
+  // comparable to Bosta's own "Total Balance" figure, which is a running
+  // balance, not a monthly metric.
+  const { data: allDelivered, error: allDelErr } = await db
+    .from("deliveries")
+    .select("id, cod_amount, raw")
+    .eq("status", "delivered");
+  if (allDelErr) return NextResponse.json({ error: allDelErr.message }, { status: 500 });
+
+  let allTimeLive = 0;
+  let allTimeSettled = 0;
+  for (const row of allDelivered ?? []) {
+    const raw = (row.raw ?? {}) as {
+      flexShippingInfo?: { isAmountCollected?: boolean; collectedAmount?: number };
+      paymentInfo?: { amount?: number; capturedStatus?: string };
+      cashoutInfo?: { expectedCashoutDate?: string };
+    };
+    const collected =
+      (raw.flexShippingInfo?.isAmountCollected ? raw.flexShippingInfo.collectedAmount : undefined) ??
+      (raw.paymentInfo?.capturedStatus === "SUCCEEDED" ? raw.paymentInfo.amount : undefined) ??
+      (Number(row.cod_amount) || 0);
+    const expectedCashout = raw.cashoutInfo?.expectedCashoutDate;
+    const alreadySettled = Boolean(expectedCashout && expectedCashout <= now);
+    if (alreadySettled) allTimeSettled += collected;
+    else allTimeLive += collected;
+  }
+
   return NextResponse.json({
     statusCountsAllTime: statusCounts,
     deliveredLast30Days: delivered?.length ?? 0,
@@ -97,6 +125,9 @@ export async function GET(request: NextRequest) {
     collectedSum,
     settledSum,
     liveSum,
+    allTimeDeliveredCount: allDelivered?.length ?? 0,
+    allTimeLive,
+    allTimeSettled,
     samples,
   });
 }
