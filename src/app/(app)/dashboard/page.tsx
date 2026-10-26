@@ -80,19 +80,23 @@ export default async function DashboardPage({
 
       {/* Cash flow */}
       <section>
-        <h2 className="text-sm font-semibold text-neutral-700 mb-3">Cash flow (last 30 days)</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <h2 className="text-sm font-semibold text-neutral-700 mb-3">Bosta balance (all-time)</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
           <StatTile
             label="COD collected, not yet paid out"
             value={formatMoney(cashFlow.codLive)}
-            sub="Collected by courier; Bosta hasn't cashed it out to you yet"
+            sub="Collected by courier across all deliveries ever; Bosta hasn't cashed it out to you yet"
           />
           <StatTile
             label="COD collected & paid out"
             value={formatMoney(cashFlow.codSettled)}
             tone="positive"
-            sub="Already in your Bosta/bank balance"
+            sub="Already in your Bosta/bank balance, all-time"
           />
+        </div>
+
+        <h2 className="text-sm font-semibold text-neutral-700 mb-3">Hidden costs (last 30 days)</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <StatTile
             label="Est. Bosta shipping fees"
             value={formatMoney(cashFlow.bostaFeesOwed)}

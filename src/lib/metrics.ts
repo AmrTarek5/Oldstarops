@@ -162,14 +162,15 @@ export async function getBulkOrders(days = 30) {
 export async function getCashFlow(days = 30) {
   const db = supabaseAdmin();
   const since = daysAgoIso(days);
-  const now = new Date().toISOString();
 
-  const [deliveredRes, feesRes, returnsRes, codOrdersRes] = await Promise.all([
-    db
-      .from("deliveries")
-      .select("cod_amount, delivered_at, raw")
-      .eq("status", "delivered")
-      .gte("delivered_at", since),
+  // codLive/codSettled is a running balance (mirrors Bosta's own "Total
+  // Balance" wallet figure), not a last-N-days activity metric, so it's
+  // computed across ALL delivered orders via v_cash_balance - a Postgres
+  // view, not a plain `select` pulled into Node. A plain select here would
+  // be silently capped at PostgREST's default 1000-row limit well below our
+  // real delivery count.
+  const [balanceRes, feesRes, returnsRes, codOrdersRes] = await Promise.all([
+    db.from("v_cash_balance").select("bucket, total_collected"),
     db.from("deliveries").select("bosta_fee").gte("created_at", since),
     db
       .from("return_requests")
@@ -182,39 +183,16 @@ export async function getCashFlow(days = 30) {
       .eq("cod", true)
       .gte("shopify_created_at", since),
   ]);
-  if (deliveredRes.error) throw deliveredRes.error;
+  if (balanceRes.error) throw balanceRes.error;
   if (feesRes.error) throw feesRes.error;
   if (returnsRes.error) throw returnsRes.error;
   if (codOrdersRes.error) throw codOrdersRes.error;
 
   let codLive = 0;
   let codSettled = 0;
-  for (const row of deliveredRes.data ?? []) {
-    const raw = (row.raw ?? {}) as {
-      flexShippingInfo?: { isAmountCollected?: boolean; collectedAmount?: number };
-      paymentInfo?: { amount?: number; capturedStatus?: string };
-      cashoutInfo?: { expectedCashoutDate?: string };
-    };
-
-    // Bosta's own reported collected amount (actual cash the courier took,
-    // or the captured online payment) is more accurate than the order's
-    // nominal COD due amount - e.g. it's 0 if the customer refused to pay.
-    const collected =
-      (raw.flexShippingInfo?.isAmountCollected ? raw.flexShippingInfo.collectedAmount : undefined) ??
-      (raw.paymentInfo?.capturedStatus === "SUCCEEDED" ? raw.paymentInfo.amount : undefined) ??
-      (Number(row.cod_amount) || 0);
-
-    // Bosta's own expected cashout date (when they actually pay this
-    // delivery's collected cash to the business) replaces the previous
-    // guessed 3-day grace period.
-    const expectedCashout = raw.cashoutInfo?.expectedCashoutDate;
-    const alreadySettled = Boolean(expectedCashout && expectedCashout <= now);
-
-    if (alreadySettled) {
-      codSettled += collected;
-    } else {
-      codLive += collected;
-    }
+  for (const row of balanceRes.data ?? []) {
+    if (row.bucket === "settled") codSettled = Number(row.total_collected) || 0;
+    else codLive = Number(row.total_collected) || 0;
   }
 
   const bostaFeesOwed = (feesRes.data ?? []).reduce((sum, r) => sum + (Number(r.bosta_fee) || 0), 0);

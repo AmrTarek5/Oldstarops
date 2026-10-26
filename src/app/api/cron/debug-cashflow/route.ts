@@ -113,6 +113,13 @@ export async function GET(request: NextRequest) {
     else allTimeLive += collected;
   }
 
+  // v_cash_balance (if the 0005 migration has been applied) aggregates in
+  // Postgres, so it isn't subject to the 1000-row cap that allTimeLive/
+  // allTimeSettled above are vulnerable to - include it for comparison.
+  const { data: viewBalance, error: viewErr } = await db
+    .from("v_cash_balance")
+    .select("bucket, delivery_count, total_collected");
+
   return NextResponse.json({
     statusCountsAllTime: statusCounts,
     deliveredLast30Days: delivered?.length ?? 0,
@@ -128,6 +135,8 @@ export async function GET(request: NextRequest) {
     allTimeDeliveredCount: allDelivered?.length ?? 0,
     allTimeLive,
     allTimeSettled,
+    note: "allTimeLive/allTimeSettled above are capped at 1000 rows (PostgREST default) and understate the real total - v_cash_balance below is the correct, uncapped figure",
+    v_cash_balance: viewErr ? { error: viewErr.message } : viewBalance,
     samples,
   });
 }
