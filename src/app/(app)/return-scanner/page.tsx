@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/ui";
 import SetupNotice from "@/components/setup-notice";
 import ReturnScannerClient from "@/components/return-scanner-client";
 import { getFailedDeliveryCount } from "@/lib/ops";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export default async function ReturnScannerPage() {
   try {
     failedCount = await getFailedDeliveryCount();
   } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
+    error = errorMessage(err);
   }
 
   return (

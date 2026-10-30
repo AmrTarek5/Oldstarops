@@ -2,6 +2,7 @@ import { PageHeader, EmptyState, ExportLink } from "@/components/ui";
 import SetupNotice from "@/components/setup-notice";
 import FailedDeliveriesTable from "@/components/failed-deliveries-table";
 import { getFailedDeliveries } from "@/lib/ops";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export default async function FailedDeliveriesPage() {
     return (
       <div>
         <PageHeader title="Failed Deliveries" />
-        <SetupNotice error={err instanceof Error ? err.message : String(err)} />
+        <SetupNotice error={errorMessage(err)} />
       </div>
     );
   }

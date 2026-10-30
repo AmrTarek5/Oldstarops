@@ -2,6 +2,7 @@ import { PageHeader, Table, Badge, EmptyState, ExportLink } from "@/components/u
 import SetupNotice from "@/components/setup-notice";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function ProductProfitPage() {
     return (
       <div>
         <PageHeader title="Per-Product Profit" />
-        <SetupNotice error={err instanceof Error ? err.message : String(err)} />
+        <SetupNotice error={errorMessage(err)} />
       </div>
     );
   }

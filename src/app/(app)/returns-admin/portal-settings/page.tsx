@@ -3,6 +3,7 @@ import SetupNotice from "@/components/setup-notice";
 import PortalSettingsForm from "@/components/portal-settings-form";
 import { getPortalSettings } from "@/lib/portal";
 import type { PortalSettingsRow } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export default async function PortalSettingsPage() {
   try {
     settings = await getPortalSettings();
   } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
+    error = errorMessage(err);
   }
 
   return (

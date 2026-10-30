@@ -3,6 +3,7 @@ import SetupNotice from "@/components/setup-notice";
 import PolicyForm from "@/components/policy-form";
 import { getReturnPolicy } from "@/lib/policy";
 import type { ReturnPolicyRow } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export default async function PolicyPage() {
   try {
     policy = await getReturnPolicy();
   } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
+    error = errorMessage(err);
   }
 
   return (

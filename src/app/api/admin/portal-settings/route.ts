@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPortalSettings, updatePortalSettings } from "@/lib/portal";
+import { errorMessage } from "@/lib/error-message";
 
 export async function GET() {
   try {
     const settings = await getPortalSettings();
     return NextResponse.json({ settings });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(err) }, { status: 500 });
   }
 }
 
@@ -21,6 +22,6 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(err) }, { status: 500 });
   }
 }

@@ -4,6 +4,7 @@ import VipToggle from "@/components/vip-toggle";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { getWhales } from "@/lib/metrics";
 import { WHALE_SPEND_THRESHOLD } from "@/lib/config";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export default async function WhalesPage() {
     return (
       <div>
         <PageHeader title="Whales (VIP)" />
-        <SetupNotice error={err instanceof Error ? err.message : String(err)} />
+        <SetupNotice error={errorMessage(err)} />
       </div>
     );
   }

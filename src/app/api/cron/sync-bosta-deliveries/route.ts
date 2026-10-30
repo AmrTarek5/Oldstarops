@@ -3,6 +3,7 @@ import { requireCronSecret } from "@/lib/cron-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { fetchDeliveriesPage, mapBostaState, resolveBostaFee, type BostaDelivery } from "@/lib/bosta";
 import type { DeliveryRow, SyncStateRow } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 
 export const maxDuration = 60;
 
@@ -158,7 +159,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { ok: false, error: errorMessage(err) },
       { status: 500 }
     );
   }

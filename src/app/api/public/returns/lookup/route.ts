@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { lookupOrderForPortal } from "@/lib/returns";
 import { getReturnPolicy } from "@/lib/policy";
+import { errorMessage } from "@/lib/error-message";
 
 export async function POST(request: NextRequest) {
   const { orderNumber, email } = await request.json();
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
+      { error: errorMessage(err) },
       { status: 500 }
     );
   }

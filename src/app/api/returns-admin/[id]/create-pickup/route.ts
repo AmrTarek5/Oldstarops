@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPickupForReturn } from "@/lib/returns";
+import { errorMessage } from "@/lib/error-message";
 
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -7,6 +8,6 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     const result = await createPickupForReturn(id);
     return NextResponse.json({ ok: true, pickupCreated: Boolean(result.bosta_pickup_id) });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(err) }, { status: 400 });
   }
 }

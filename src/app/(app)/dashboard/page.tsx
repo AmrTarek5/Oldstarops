@@ -4,6 +4,7 @@ import ReturnReasonsChart from "@/components/charts/return-reasons-chart";
 import DayRangeFilter from "@/components/day-range-filter";
 import SetupNotice from "@/components/setup-notice";
 import { formatMoney, formatNumber, formatPercent } from "@/lib/format";
+import { errorMessage } from "@/lib/error-message";
 import {
   getBulkOrders,
   getCashFlow,
@@ -38,7 +39,7 @@ export default async function DashboardPage({
     return (
       <div>
         <PageHeader title="Dashboard" description="Live operations overview" />
-        <SetupNotice error={err instanceof Error ? err.message : String(err)} />
+        <SetupNotice error={errorMessage(err)} />
       </div>
     );
   }

@@ -2,6 +2,7 @@ import { PageHeader, EmptyState } from "@/components/ui";
 import SetupNotice from "@/components/setup-notice";
 import BarcodeReadinessTable from "@/components/barcode-readiness-table";
 import { getVariantsMissingBarcodes } from "@/lib/ops";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export default async function BarcodeReadinessPage() {
     return (
       <div>
         <PageHeader title="Barcode Readiness" />
-        <SetupNotice error={err instanceof Error ? err.message : String(err)} />
+        <SetupNotice error={errorMessage(err)} />
       </div>
     );
   }

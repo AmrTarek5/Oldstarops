@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReturnPolicy, updateReturnPolicy } from "@/lib/policy";
+import { errorMessage } from "@/lib/error-message";
 
 export async function GET() {
   try {
     const policy = await getReturnPolicy();
     return NextResponse.json({ policy });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(err) }, { status: 500 });
   }
 }
 
@@ -22,6 +23,6 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(err) }, { status: 500 });
   }
 }

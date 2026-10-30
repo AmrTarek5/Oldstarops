@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { toCsv, csvResponse } from "@/lib/csv";
 import { getBulkOrders, getWhales } from "@/lib/metrics";
 import { getFailedDeliveries, getInTransitStock, getShippingReconciliation } from "@/lib/ops";
+import { errorMessage } from "@/lib/error-message";
 
 function daysAgoIso(days: number) {
   const d = new Date();
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
+      { error: errorMessage(err) },
       { status: 500 }
     );
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { setVariantBarcode } from "@/lib/shopify";
+import { errorMessage } from "@/lib/error-message";
 
 async function generateOne(variantId: string) {
   const db = supabaseAdmin();
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
           const barcode = await generateOne(id);
           results.push({ variantId: id, barcode });
         } catch (err) {
-          results.push({ variantId: id, error: err instanceof Error ? err.message : String(err) });
+          results.push({ variantId: id, error: errorMessage(err) });
         }
       }
       return NextResponse.json({ ok: true, results });
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Provide variantId or variantIds" }, { status: 400 });
   } catch (err) {
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { ok: false, error: errorMessage(err) },
       { status: 400 }
     );
   }

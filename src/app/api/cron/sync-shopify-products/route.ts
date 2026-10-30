@@ -3,6 +3,7 @@ import { requireCronSecret } from "@/lib/cron-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { fetchVariantsPage, idFromGid, type ShopifyVariantNode } from "@/lib/shopify";
 import type { InventorySnapshotRow, SyncStateRow } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 
 export const maxDuration = 60;
 
@@ -77,7 +78,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, pagesFetched, variantsUpserted, sweepComplete });
   } catch (err) {
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { ok: false, error: errorMessage(err) },
       { status: 500 }
     );
   }

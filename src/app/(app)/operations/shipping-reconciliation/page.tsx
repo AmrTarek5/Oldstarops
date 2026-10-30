@@ -3,6 +3,7 @@ import SetupNotice from "@/components/setup-notice";
 import DayRangeFilter from "@/components/day-range-filter";
 import { formatMoney, formatDate } from "@/lib/format";
 import { getShippingReconciliation } from "@/lib/ops";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function ShippingReconciliationPage({
     return (
       <div>
         <PageHeader title="Shipping Reconciliation" />
-        <SetupNotice error={err instanceof Error ? err.message : String(err)} />
+        <SetupNotice error={errorMessage(err)} />
       </div>
     );
   }

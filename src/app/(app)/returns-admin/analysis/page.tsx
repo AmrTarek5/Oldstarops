@@ -5,6 +5,7 @@ import ReturnReasonsChart from "@/components/charts/return-reasons-chart";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { getReturnsSummary } from "@/lib/metrics";
 import { getMostReturnedProducts } from "@/lib/returns";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function ReturnsAnalysisPage({
       getMostReturnedProducts(days),
     ]);
   } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
+    error = errorMessage(err);
   }
 
   return (

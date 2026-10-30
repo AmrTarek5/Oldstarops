@@ -4,6 +4,7 @@ import DayRangeFilter from "@/components/day-range-filter";
 import { formatMoney, formatNumber, formatDate } from "@/lib/format";
 import { getBulkOrders } from "@/lib/metrics";
 import { BULK_ORDER_MIN_ITEMS } from "@/lib/config";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function BulkOrdersPage({
     return (
       <div>
         <PageHeader title="Bulk Orders" />
-        <SetupNotice error={err instanceof Error ? err.message : String(err)} />
+        <SetupNotice error={errorMessage(err)} />
       </div>
     );
   }

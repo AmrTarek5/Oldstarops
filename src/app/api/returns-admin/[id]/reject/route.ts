@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rejectReturnRequest } from "@/lib/returns";
+import { errorMessage } from "@/lib/error-message";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -8,6 +9,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await rejectReturnRequest(id, notes);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(err) }, { status: 400 });
   }
 }

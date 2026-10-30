@@ -2,6 +2,7 @@ import { PageHeader, StatTile, Table, Badge, EmptyState, ExportLink } from "@/co
 import SetupNotice from "@/components/setup-notice";
 import { formatMoney } from "@/lib/format";
 import { getInTransitStock } from "@/lib/ops";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export default async function InTransitPage() {
     return (
       <div>
         <PageHeader title="In-Transit Stock" />
-        <SetupNotice error={err instanceof Error ? err.message : String(err)} />
+        <SetupNotice error={errorMessage(err)} />
       </div>
     );
   }

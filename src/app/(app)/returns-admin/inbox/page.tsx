@@ -3,6 +3,7 @@ import SetupNotice from "@/components/setup-notice";
 import ReturnsInbox from "@/components/returns-inbox";
 import { getReturnRequests } from "@/lib/returns";
 import type { ReturnRequestRow } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export default async function ReturnsInboxPage() {
   try {
     requests = await getReturnRequests(["under_review"]);
   } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
+    error = errorMessage(err);
   }
 
   return (

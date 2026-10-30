@@ -3,6 +3,7 @@ import { requireCronSecret } from "@/lib/cron-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { fetchOrdersPage, isCodOrder, type ShopifyOrder } from "@/lib/shopify";
 import type { OrderRow, OrderLineItem, SyncStateRow } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 
 export const maxDuration = 60; // Node runtime cap on Vercel Hobby; keep pages bounded below it.
 
@@ -119,7 +120,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { ok: false, error: errorMessage(err) },
       { status: 500 }
     );
   }
